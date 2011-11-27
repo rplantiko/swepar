@@ -225,10 +225,7 @@ static int swecalc(double tjd, int ipl, int iflag, double **x, char *serr, struc
   swi_check_nutation(tjd, iflag);
 
 // --- Select computation method
-  calcfun calc = swecalc_get_calc_type( ipl, iflag, serr );
-  if (calc == NULL) {
-    return ERR;
-    }
+  calcfun calc = swecalc_get_calc_type( ipl, iflag, serr, swed );
 
 // Apply computation method
   int retc = calc(tjd,ipl,iflag,x,serr,swed);
@@ -504,7 +501,7 @@ int swecalc_fictitious(double tjd, int ipl, int iflag, double **x, char *serr, s
   }
 
 // Which calculation method has to be chosen
-calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr) {
+calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr, struct swe_data *swed) {
 
 // Main planet
   if ( ( ipl == SE_SUN   && is_not_set(iflag,SEFLG_HELCTR) )
@@ -569,7 +566,8 @@ calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr) {
     }
 
   sprintf(serr, "illegal planet number %d.",ipl);
-  return NULL;
+  throw(ERR,serr,serr,swed);
+  return NULL; // will not be reached
   }
 
 

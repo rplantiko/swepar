@@ -72,7 +72,7 @@ static _calcfun(swecalc_mean_apogee)
 static _calcfun(swecalc_asteroid)
 static _calcfun(swecalc_fictitious)
 
-calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr);  
+calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr, struct swe_data *swed);  
 
 /****************
  * global stuff *
@@ -406,7 +406,7 @@ static inline bool is_main_asteroid( int ipli ) {
   }
 
 static inline void throw(int retc, char* msg, char *serr, struct swe_data* swed) {
-  msg_append( serr, msg );
+  if (serr != msg) msg_append( serr, msg );
   longjmp( swed->env, retc);  
   }  
 
