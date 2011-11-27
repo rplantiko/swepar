@@ -194,7 +194,7 @@ static int se_calc_map_results( int ipl, int iflag, int ephemeris_requested, dou
 
 // If requested, convert to radians
   if (is_set(iflag,SEFLG_RADIANS))
-    for (int j = 0; j < imax; j++) xout[j] *= DEGTORAD;
+    convert_arcs( xout, DEGTORAD);
 
 // If no ephemeris has been specified, do not return chosen ephemeris
 // (as the caller may check iflag_new == iflag_old for regular termination)
@@ -873,8 +873,7 @@ static int sweplan(double tjd, int ipli, int ifno, int iflag, AS_BOOL do_save,
       } 
     else {
       retc = sweph(tjd, SEI_SUNBARY, SEI_FILE_PLANET, iflag, NULL, do_save, xps, serr, swed);/**/
-      if (retc != OK)
-      return(retc);
+      if (retc != OK) return(retc);
       }
     vec_copy(xpsret,xps,6);
     }
@@ -905,7 +904,7 @@ static int sweplan(double tjd, int ipli, int ifno, int iflag, AS_BOOL do_save,
     if (tjd == pebdp->teval
     && pebdp->iephe == SEFLG_SWIEPH
     && (!speedf2 || speedf1)) {
-      vec_copy(xpe,pebdp,6);
+      vec_copy(xpe,pebdp->x,6);
       } 
     else {
       retc = sweph(tjd, SEI_EMB, SEI_FILE_PLANET, iflag, NULL, do_save, xpe, serr, swed);
@@ -3702,16 +3701,12 @@ static int lunar_osc_elem(double tjd, int ipl, int iflag, char *serr, struct swe
     /**********************
      * radians to degrees *
      **********************/
-    /*if (is_not_set(iflag,SEFLG_RADIANS)) {*/
-      for (i = 0; i < 2; i++) {
-        ndp->xreturn[i] *= RADTODEG;    /* ecliptic */
-        ndp->xreturn[i+3] *= RADTODEG;
-        ndp->xreturn[i+12] *= RADTODEG;  /* equator */
-        ndp->xreturn[i+15] *= RADTODEG;
-    }
-      ndp->xreturn[0] = swe_degnorm(ndp->xreturn[0]);
-      ndp->xreturn[12] = swe_degnorm(ndp->xreturn[12]);
-    /*}*/
+    convert_arcs( ndp->xreturn,    RADTODEG);
+    convert_arcs( ndp->xreturn+12, RADTODEG);
+ 
+    ndp->xreturn[0]  = swe_degnorm(ndp->xreturn[0]);
+    ndp->xreturn[12] = swe_degnorm(ndp->xreturn[12]);
+
   }
   return OK;
 }
@@ -3850,16 +3845,12 @@ static int intp_apsides(double tjd, int ipl, int iflag, char *serr, struct swe_d
   /**********************
    * radians to degrees *
    **********************/
-  /*if (is_not_set(iflag,SEFLG_RADIANS)) {*/
-  for (i = 0; i < 2; i++) {
-    ndp->xreturn[i] *= RADTODEG;    /* ecliptic */
-    ndp->xreturn[i+3] *= RADTODEG;
-    ndp->xreturn[i+12] *= RADTODEG;  /* equator */
-    ndp->xreturn[i+15] *= RADTODEG;
-  }
-  ndp->xreturn[0] = swe_degnorm(ndp->xreturn[0]);
-  ndp->xreturn[12] = swe_degnorm(ndp->xreturn[12]);
-  /*}*/
+   convert_arcs( ndp->xreturn,    RADTODEG);
+   convert_arcs( ndp->xreturn+12, RADTODEG);
+  
+   ndp->xreturn[0] = swe_degnorm(ndp->xreturn[0]);
+   ndp->xreturn[12] = swe_degnorm(ndp->xreturn[12]);
+  
   return OK;
 }
 
@@ -4542,7 +4533,7 @@ int FAR PASCAL_CONV swed_fixstar(char *star, double tjd, int iflag,
    * radians to degrees *
    **********************/
   if (is_not_set(iflag, SEFLG_RADIANS | SEFLG_XYZ)) {
-    smul(x,RADTODEG,6);
+    convert_arcs(x,RADTODEG);
   }
 
   vec_copy(xx,x,6);

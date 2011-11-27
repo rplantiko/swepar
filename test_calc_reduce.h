@@ -292,13 +292,13 @@ static inline void* vec_clear( void* x, int size) {
 
 static inline void* vec_init( void* x, double s, int size) {
   double* fx = x;
-  if (x) for (int i=0;i<size;i++) fx[i] = s;
+  if (x) for (int i=size-1;i>=0;--i) fx[i] = s;
   return x;
   }
 
 static inline void* vec_int_init( void* x, int i0, int size) {
   int* ix = x;
-  if (x) for (int i=0;i<size;i++) ix[i] = i0;
+  if (x) for (int i=size-1;i>=0;--i) ix[i] = i0;
   return x;
   }
 
@@ -310,30 +310,38 @@ static inline void* vec_copy( void* to, void* from, int n) {
 static inline void* vec_add( void* to, void* from, int n) {
   double *fto = (double *) to,
          *ffrom = (double *) from;
-  if (to) for (int i=0;i<n;i++) fto[i] += ffrom[i];
+  if (to) for (int i=n-1;i>=0;--i) fto[i] += ffrom[i];
   return fto;
   }
 
 static inline void* vec_sub( void* from, void* y, int n) {
   double *ffrom = (double *) from,
          *fy = (double *) y;
-  if (from) for (int i=0;i<n;i++) ffrom[i] -= fy[i];
+  if (from) for (int i=n-1;i>=0;--i) ffrom[i] -= fy[i];
   return from;
   }
 
 static inline double vec_length( void* v, int n) {
   double *fv = (double *) v,
          s = 0;
-  if (v) for (int i=0;i<n;i++) s += fv[i]*fv[i];
+  if (v) for (int i=n-1;i>=0;--i) s += fv[i]*fv[i];
   return v ? sqrt( s ) : 0;
   }
 
 static inline void* smul( void* to, double s, int n) {
   double *fto = (double *) to;
-  if (to) for (int i=0;i<n;i++) fto[i] *= s;
+  if (to) for (int i=n-1;i>=0;--i) fto[i] *= s;
   return fto;
   }
 
+// Convert the arc components (longitude, latidude) from rad to deg or vice versa  
+static inline void* convert_arcs( void* x, double factor) {
+  double *fx = (double *) x;
+  if (x) for (int i=4;i>=0;--i) if (i!=2) fx[i] *= factor;
+  return x;
+  }
+  
+  
 static inline double vec_normalize(void *v, int n) {
   double d = vec_length(v,n);
   if (d > 0) smul( v, 1./d, n);
@@ -342,7 +350,7 @@ static inline double vec_normalize(void *v, int n) {
 
 static inline void* sdiv( void* to, double s, int n) {
   double *fto = (double *) to;
-  if (to) for (int i=0;i<n;i++) fto[i] /= s;
+  if (to) for (int i=n-1;i>=0;--i) fto[i] /= s;
   return fto;
   }
 static inline char* msg_append(char* serr, char* text) {
