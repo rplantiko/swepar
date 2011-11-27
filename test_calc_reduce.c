@@ -2014,7 +2014,7 @@ void swi_aberr_light(double *xx, double *xe, int iflag) {
      */
     for (i = 0; i <= 2; i++)
       u[i] = xxs[i] - intv * xxs[i+3];
-    ru = sqrt(square_sum(u));
+    ru = vec_length(u,3);
     f1 = dot_prod(u, v) / ru;
     f2 = 1.0 + f1 / (1.0 + b_1);
     for (i = 0; i <= 2; i++)
@@ -2192,7 +2192,7 @@ void swid_deflect_light(double *xx, double dt, int iflag, struct swe_data *swed)
  */
 static int app_pos_etc_sun(int iflag, char *serr, struct swe_data* swed)
 {
-  int i, j, niter, retc = OK;
+  int j, niter, retc = OK;
   int flg1, flg2;
   double xx[6], xxsv[6], dx[3], dt, t;
   double xearth[6], xsun[6], xobs[6];
@@ -2215,29 +2215,27 @@ static int app_pos_etc_sun(int iflag, char *serr, struct swe_data* swed)
   if (is_set(iflag,SEFLG_TOPOCTR)) {
     if (swed->topd.teval != pedp->teval
       || swed->topd.teval == 0) {
-      if (swi_get_observer(pedp->teval, iflag, DO_SAVE, xobs, serr) != OK)
+      if (swi_get_observer(pedp->teval, iflag, DO_SAVE, xobs, serr) != OK) 
         return ERR;
-    } else {
-      for (i = 0; i <= 5; i++)
-        xobs[i] = swed->topd.xobs[i];
-    }
+        } 
+      else {
+        vec_copy(xobs,swed->topd.xobs,6);
+        }
     /* barycentric position of observer */
-    for (i = 0; i <= 5; i++)
-      xobs[i] = xobs[i] + pedp->x[i];
-  } else {
+    vec_add(xobs, pedp->x, 6);
+    } 
+  else {
     /* barycentric position of geocenter */
-    for (i = 0; i <= 5; i++)
-      xobs[i] = pedp->x[i];
-  }
+    vec_copy( xobs, pedp->x, 6);
+    }
   /***************************************
    * true heliocentric position of earth *
    ***************************************/
   if (pedp->iephe == SEFLG_MOSEPH || is_set(iflag,SEFLG_BARYCTR))
-    for (i = 0; i <= 5; i++)
-      xx[i] = xobs[i];
+    vec_copy(xx,xobs,6);
   else
-    for (i = 0; i <= 5; i++)
-      xx[i] = xobs[i] - psdp->x[i];
+    vec_sub( vec_copy(xx,xobs,6), psdp->x, 6 );
+
   /*******************************
    * light-time                  *
    *******************************/
@@ -2257,49 +2255,46 @@ static int app_pos_etc_sun(int iflag, char *serr, struct swe_data* swed)
      */
     if (pedp->iephe == SEFLG_JPLEPH || pedp->iephe == SEFLG_SWIEPH
       || is_set(iflag,SEFLG_HELCTR | SEFLG_BARYCTR)) {
-      for (i = 0; i <= 5; i++) {
-        xearth[i] = xobs[i];
-  if (pedp->iephe == SEFLG_MOSEPH)
-    xsun[i] = 0;
-  else
-    xsun[i] = psdp->x[i];
-      }
+      
+      vec_copy(xearth,xobs,6);
+      if (pedp->iephe == SEFLG_MOSEPH) 
+          vec_clear(xsun,6);
+        else
+          vec_copy(xsun,psdp->x,6);
       niter = 1;  /* # of iterations */
       for (j = 0; j <= niter; j++) {
   /* distance earth-sun */
-  for (i = 0; i <= 2; i++) {
-    dx[i] = xearth[i];
-    if (is_not_set(iflag,SEFLG_BARYCTR))
-      dx[i] -= xsun[i];
-  }
+        vec_copy(dx,xearth,3);
+        if (is_not_set(iflag,SEFLG_BARYCTR))
+          vec_sub( dx, xsun, 3);
+        
   /* new t */
-  dt = sqrt(square_sum(dx)) * AUNIT / CLIGHT / 86400.0;
-  t = pedp->teval - dt;
+        dt = sqrt(square_sum(dx)) * AUNIT / CLIGHT / 86400.0;
+        t = pedp->teval - dt;
   /* new position */
-  switch(pedp->iephe) {
-    /* if geocentric sun, new sun at t'
-     * if heliocentric or barycentric earth, new earth at t' */
-    case SEFLG_SWIEPH:
-      /*
-        retc = sweph(t, SEI_SUN, SEI_FILE_PLANET, iflag, NULL, NO_SAVE, xearth, serr);
-      */
-      if (is_set(iflag,SEFLG_HELCTR | SEFLG_BARYCTR))
-        retc = sweplan(t, SEI_EARTH, SEI_FILE_PLANET, iflag, NO_SAVE, xearth, NULL, xsun, NULL, serr, swed);
-            else
-        retc = sweph(t, SEI_SUNBARY, SEI_FILE_PLANET, iflag, NULL, NO_SAVE, xsun, serr, swed);
-      break;
-    case SEFLG_MOSEPH:
-      if (is_set(iflag,SEFLG_HELCTR | SEFLG_BARYCTR))
-        retc = swi_moshplan(t, SEI_EARTH, NO_SAVE, xearth, xearth, serr);
-      /* with moshier there is no barycentric sun */
-      break;
-          default:
-      retc = ERR;
-      break;
-  }
-  if (retc != OK)
-    return(retc);
-      }
+        switch(pedp->iephe) {
+          /* if geocentric sun, new sun at t'
+           * if heliocentric or barycentric earth, new earth at t' */
+          case SEFLG_SWIEPH:
+            /*
+              retc = sweph(t, SEI_SUN, SEI_FILE_PLANET, iflag, NULL, NO_SAVE, xearth, serr);
+            */
+            if (is_set(iflag,SEFLG_HELCTR | SEFLG_BARYCTR))
+              retc = sweplan(t, SEI_EARTH, SEI_FILE_PLANET, iflag, NO_SAVE, xearth, NULL, xsun, NULL, serr, swed);
+                  else
+              retc = sweph(t, SEI_SUNBARY, SEI_FILE_PLANET, iflag, NULL, NO_SAVE, xsun, serr, swed);
+            break;
+          case SEFLG_MOSEPH:
+            if (is_set(iflag,SEFLG_HELCTR | SEFLG_BARYCTR))
+              retc = swi_moshplan(t, SEI_EARTH, NO_SAVE, xearth, xearth, serr);
+            /* with moshier there is no barycentric sun */
+            break;
+                default:
+            retc = ERR;
+            break;
+          }
+        if (retc != OK) return(retc);
+        }  
       /* apparent heliocentric earth */
       vec_copy(xx,xearth,6);
       if (is_not_set(iflag,SEFLG_BARYCTR))
@@ -2323,16 +2318,15 @@ static int app_pos_etc_sun(int iflag, char *serr, struct swe_data* swed)
     /* SEFLG_NOABERR is on, if SEFLG_HELCTR or SEFLG_BARYCTR */
     swi_aberr_light(xx, xobs, iflag);
   }
-  if (is_not_set(iflag,SEFLG_SPEED))
-    for (i = 3; i <= 5; i++)
-      xx[i] = 0;
+  if (is_not_set(iflag,SEFLG_SPEED)) vec_clear( xx+3,3 );
+    
   /* ICRS to J2000 */
   if (is_not_set(iflag,SEFLG_ICRS) && swed->jpldenum >= 403) {
     swi_bias(xx, iflag, FALSE);
   }/**/
   /* save J2000 coordinates; required for sidereal positions */
-  for (i = 0; i <= 5; i++)
-    xxsv[i] = xx[i];
+  vec_copy(xxsv,xx,6);
+
   /************************************************
    * precession, equator 2000 -> equator of date *
    ************************************************/
@@ -2382,44 +2376,37 @@ static int app_pos_etc_moon(int iflag, char *serr, struct swe_data *swed)
     return OK;
   }
   /* the conversions will be done with xx[]. */
-  for (i = 0; i <= 5; i++) {
-    xx[i] = pdp->x[i];
-    xxm[i] = xx[i];
-  }
+  vec_copy(xx,pdp->x,6);
+  vec_copy(xxm,xx,6);
+
   /***********************************
    * to solar system barycentric
    ***********************************/
-  for (i = 0; i <= 5; i++)
-  xx[i] += pedp->x[i];
+  vec_add(xx,pedp->x,6);
+
   /*******************************
    * observer
    *******************************/
   if (is_set(iflag,SEFLG_TOPOCTR)) {
     if (swed->topd.teval != pdp->teval
       || swed->topd.teval == 0) {
-      if (swi_get_observer(pdp->teval, iflag, DO_SAVE, xobs, NULL) != OK)
-        return ERR;
-    } else {
-      for (i = 0; i <= 5; i++)
-        xobs[i] = swed->topd.xobs[i];
-    }
-    for (i = 0; i <= 5; i++)
-      xxm[i] -= xobs[i];
-    for (i = 0; i <= 5; i++)
-      xobs[i] += pedp->x[i];
-  } else if (is_set(iflag,SEFLG_BARYCTR)) {
-    for (i = 0; i <= 5; i++)
-      xobs[i] = 0;
-    for (i = 0; i <= 5; i++)
-      xxm[i] += pedp->x[i];
+      if (swi_get_observer(pdp->teval, iflag, DO_SAVE, xobs, NULL) != OK) return ERR;
+      } 
+    else {
+      vec_copy(xobs,swed->topd.xobs,6);
+      }
+    vec_sub(xxm,xobs,6);
+    vec_add(xobs,pedp->x,6);
+    } 
+  else if (is_set(iflag,SEFLG_BARYCTR)) {
+    vec_clear(xobs,6);
+    vec_add(xxm,pedp->x,6);
   } else if (is_set(iflag,SEFLG_HELCTR)) {
-    for (i = 0; i <= 5; i++)
-      xobs[i] = psdp->x[i];
+    vec_copy(xobs,psdp->x,6);
     for (i = 0; i <= 5; i++)
       xxm[i] += pedp->x[i] - psdp->x[i];
   } else {
-    for (i = 0; i <= 5; i++)
-      xobs[i] = pedp->x[i];
+    vec_copy(xobs,pedp->x,6);
   }
   /*******************************
    * light-time                  *
@@ -2430,43 +2417,37 @@ static int app_pos_etc_moon(int iflag, char *serr, struct swe_data *swed)
     switch(pdp->iephe) {
       case SEFLG_SWIEPH:
         retc = sweplan(t, SEI_MOON, SEI_FILE_MOON, iflag, NO_SAVE, xx, xe, xs, NULL, serr, swed);
-        if (retc != OK)
-          return(retc);
-        for (i = 0; i <= 5; i++) xx[i] += xe[i];
+        if (retc != OK) return(retc);
+        vec_add(xx,xe,6);
         break;
       case SEFLG_MOSEPH:
         /* this method results in an error of a milliarcsec in speed */
         for (i = 0; i <= 2; i++) {
           xx[i] -= dt * xx[i+3];
           xe[i] = pedp->x[i] - dt * pedp->x[i+3];
-      xe[i+3] = pedp->x[i+3];
-    xs[i] = 0;
-    xs[i+3] = 0;
-        }
+          xe[i+3] = pedp->x[i+3];
+          xs[i] = 0;
+          xs[i+3] = 0;
+          }
         break;
-    }
+      }
     if (is_set(iflag,SEFLG_TOPOCTR)) {
-      if (swi_get_observer(t, iflag, NO_SAVE, xobs2, NULL) != OK)
-    return ERR;
-      for (i = 0; i <= 5; i++)
-  xobs2[i] += xe[i];
+      if (swi_get_observer(t, iflag, NO_SAVE, xobs2, NULL) != OK) return ERR;
+      vec_add(xobs2,xe,6);
     } else if (is_set(iflag,SEFLG_BARYCTR)) {
-      for (i = 0; i <= 5; i++)
-  xobs2[i] = 0;
+      vec_clear(xobs2,6);
     } else if (is_set(iflag,SEFLG_HELCTR)) {
-      for (i = 0; i <= 5; i++)
-  xobs2[i] = xs[i];
+      vec_copy(xobs2,xs,6);
     } else {
-      for (i = 0; i <= 5; i++)
-  xobs2[i] = xe[i];
+      vec_copy(xobs2,xe,6);
     }
   }
   /*************************
    * to correct center
    *************************/
-  for (i = 0; i <= 5; i++)
-    xx[i] -= xobs[i];
-  /**********************************
+   vec_sub(xx,xobs,6);
+
+   /**********************************
    * 'annual' aberration of light   *
    **********************************/
   if (is_not_set(iflag,SEFLG_TRUEPOS | SEFLG_NOABERR)) {
@@ -2520,8 +2501,7 @@ static int app_pos_etc_sbar(int iflag, char *serr, struct swe_data *swed)
   struct plan_data *psbdp = &swed->pldat[SEI_SUNBARY];
   struct epsilon *oe = &swed->oec;
   /* the conversions will be done with xx[]. */
-  for (i = 0; i <= 5; i++)
-    xx[i] = psbdp->x[i];
+  vec_copy(xx,psbdp->x,6);
   /**************
    * light-time *
    **************/
@@ -2530,16 +2510,15 @@ static int app_pos_etc_sbar(int iflag, char *serr, struct swe_data *swed)
     for (i = 0; i <= 2; i++)
       xx[i] -= dt * xx[i+3];  /* apparent position */
   }
-  if (is_not_set(iflag,SEFLG_SPEED))
-    for (i = 3; i <= 5; i++)
-      xx[i] = 0;
+  if (is_not_set(iflag,SEFLG_SPEED)) vec_clear(xx+3,3);
+
   /* ICRS to J2000 */
   if (is_not_set(iflag,SEFLG_ICRS) && swed->jpldenum >= 403) {
     swi_bias(xx, iflag, FALSE);
-  }/**/
+  }
   /* save J2000 coordinates; required for sidereal positions */
-  for (i = 0; i <= 5; i++)
-    xxsv[i] = xx[i];
+  vec_copy(xxsv,xx,6);
+
   /************************************************
    * precession, equator 2000 -> equator of date *
    ************************************************/
@@ -2568,9 +2547,7 @@ static int app_pos_etc_sbar(int iflag, char *serr, struct swe_data *swed)
  * iflag  flags
  * serr         error string
  */
-static int app_pos_etc_mean(int ipl, int iflag, char *serr, struct swe_data *swed)
-{
-  int i;
+static int app_pos_etc_mean(int ipl, int iflag, char *serr, struct swe_data *swed) {
   int flg1, flg2;
   double xx[6], xxsv[6];
   struct plan_data *pdp = &swed->nddat[ipl];
@@ -2584,21 +2561,19 @@ static int app_pos_etc_mean(int ipl, int iflag, char *serr, struct swe_data *swe
     pdp->iephe = iflag & SEFLG_EPHMASK;
     return OK;
   }
-  for (i = 0; i <= 5; i++)
-    xx[i] = pdp->x[i];
+  vec_copy(xx,pdp->x,6);
+
   /* cartesian equatorial coordinates */
   swi_polcart_sp(xx, xx);
   swi_coortrf2(xx, xx, -swed->oec.seps, swed->oec.ceps);
   swi_coortrf2(xx+3, xx+3, -swed->oec.seps, swed->oec.ceps);
-  if (is_not_set(iflag,SEFLG_SPEED))
-    for (i = 3; i <= 5; i++)
-      xx[i] = 0;
+  if (is_not_set(iflag,SEFLG_SPEED)) vec_clear(xx+3,3);
+
   /* J2000 coordinates; required for sidereal positions */
   if ((is_set(iflag,SEFLG_SIDEREAL)
     && (swed->sidd.sid_mode & SE_SIDBIT_ECL_T0))
       || (swed->sidd.sid_mode & SE_SIDBIT_SSY_PLANE)) {
-    for (i = 0; i <= 5; i++)
-      xxsv[i] = xx[i];
+    vec_copy(xxsv,xx,6);
     /* xxsv is not J2000 yet! */
     if (pdp->teval != J2000) {
       swi_precess(xxsv, pdp->teval, J_TO_J2000);
@@ -3618,8 +3593,7 @@ static int lunar_osc_elem(double tjd, int ipl, int iflag, char *serr, struct swe
       ndp = &swed->nddat[SEI_OSCU_APOG];
     memset((void *) ndp->xreturn, 0, 24 * sizeof(double));
     /* cartesian ecliptic */
-    for (i = 0; i <= 5; i++)
-      ndp->xreturn[6+i] = ndp->x[i];
+    vec_copy(ndp->xreturn+6,ndp->x,6);
     /* polar ecliptic */
     swi_cartpol_sp(ndp->xreturn+6, ndp->xreturn);
     /* cartesian equatorial */
@@ -3661,8 +3635,8 @@ static int lunar_osc_elem(double tjd, int ipl, int iflag, char *serr, struct swe
       /* rigorous algorithm */
       if ((swed->sidd.sid_mode & SE_SIDBIT_ECL_T0)
         || (swed->sidd.sid_mode & SE_SIDBIT_SSY_PLANE)) {
-  for (i = 0; i <= 5; i++)
-    x[i] = ndp->xreturn[18+i];
+  vec_copy(x,ndp->xreturn+18,6);
+
   /* remove nutation */
   if (is_not_set(iflag,SEFLG_NONUT))
     swi_nutate(x, iflag, TRUE);
@@ -3689,14 +3663,12 @@ static int lunar_osc_elem(double tjd, int ipl, int iflag, char *serr, struct swe
     } else if (is_set(iflag,SEFLG_J2000)) {
       /* node and apogee are referred to t;
        * the ecliptic position must be transformed to J2000 */
-      for (i = 0; i <= 5; i++)
-        x[i] = ndp->xreturn[18+i];
+      vec_copy(x,ndp->xreturn+18,6);
       /* precess to J2000 */
       swi_precess(x, tjd, J_TO_J2000);
       if (is_set(iflag,SEFLG_SPEED))
         swi_precess_speed(x, tjd, J_TO_J2000);
-      for (i = 0; i <= 5; i++)
-        ndp->xreturn[18+i] = x[i];
+      vec_copy(ndp->xreturn+18,x,6);  
       swi_cartpol_sp(ndp->xreturn+18, ndp->xreturn+12);
       swi_coortrf2(ndp->xreturn+18, ndp->xreturn+6, swed->oec2000.seps, swed->oec2000.ceps);
       if (is_set(iflag,SEFLG_SPEED))
@@ -3775,9 +3747,8 @@ static int intp_apsides(double tjd, int ipl, int iflag, char *serr, struct swe_d
     for (i = 1; i < 3; i++)
       xx[i] -= dt * xx[i+3];
   }
-  for (i = 0; i <= 5; i++)
-    ndp->xreturn[i+6] = xx[i];
-  /*printf("%.10f, %.10f, %.10f, %.10f\n", xx[0] /DEGTORAD, xx[1] / DEGTORAD, xx [2], xx[3] /DEGTORAD);*/
+  vec_copy(ndp->xreturn+6,xx,6);
+
   /* equatorial cartesian */
   swi_coortrf2(ndp->xreturn+6, ndp->xreturn+18, -oe->seps, oe->ceps);
   if (is_set(iflag,SEFLG_SPEED))
@@ -3791,8 +3762,7 @@ static int intp_apsides(double tjd, int ipl, int iflag, char *serr, struct swe_d
     /* rigorous algorithm */
     if ((swed->sidd.sid_mode & SE_SIDBIT_ECL_T0)
   || (swed->sidd.sid_mode & SE_SIDBIT_SSY_PLANE)) {
-      for (i = 0; i <= 5; i++)
-  x[i] = ndp->xreturn[18+i];
+      vec_copy(x,ndp->xreturn+18,6);
       /* precess to J2000 */
       swi_precess(x, tjd, J_TO_J2000);
       if (is_set(iflag,SEFLG_SPEED))
@@ -3815,14 +3785,12 @@ static int intp_apsides(double tjd, int ipl, int iflag, char *serr, struct swe_d
   } else if (is_set(iflag,SEFLG_J2000)) {
     /* node and apogee are referred to t;
      * the ecliptic position must be transformed to J2000 */
-    for (i = 0; i <= 5; i++)
-      x[i] = ndp->xreturn[18+i];
+    vec_copy(x,ndp->xreturn+18,6);
     /* precess to J2000 */
     swi_precess(x, tjd, J_TO_J2000);
     if (is_set(iflag,SEFLG_SPEED))
       swi_precess_speed(x, tjd, J_TO_J2000);
-    for (i = 0; i <= 5; i++)
-      ndp->xreturn[18+i] = x[i];
+    vec_copy(ndp->xreturn+18,x,6);      
     swi_cartpol_sp(ndp->xreturn+18, ndp->xreturn+12);
     swi_coortrf2(ndp->xreturn+18, ndp->xreturn+6, swed->oec2000.seps, swed->oec2000.ceps);
     if (is_set(iflag,SEFLG_SPEED))
@@ -3843,8 +3811,8 @@ static int intp_apsides(double tjd, int ipl, int iflag, char *serr, struct swe_d
     if (is_not_set(iflag,SEFLG_NONUT)) {
       swi_coortrf2(ndp->xreturn+6, ndp->xreturn+6, nut->snut, nut->cnut);
       if (is_set(iflag,SEFLG_SPEED))
-  swi_coortrf2(ndp->xreturn+9, ndp->xreturn+9, nut->snut, nut->cnut);
-    }
+        swi_coortrf2(ndp->xreturn+9, ndp->xreturn+9, nut->snut, nut->cnut);
+      }
     /* ecliptic polar */
     swi_cartpol_sp(ndp->xreturn+6, ndp->xreturn);
   }
@@ -3949,8 +3917,7 @@ int swid_plan_for_osc_elem(int iflag, double tjd, double *xx, struct swe_data *s
       x[i+3] = xx[3] * nutp->matrix[0][i] +
          xx[4] * nutp->matrix[1][i] +
          xx[5] * nutp->matrix[2][i];
-    for (i = 0; i <= 5; i++)
-      xx[i] = x[i];
+    vec_copy(xx,x,6);
   }
   /************************************************
    * transformation to ecliptic                   *
@@ -4399,16 +4366,13 @@ int FAR PASCAL_CONV swed_fixstar(char *star, double tjd, int iflag,
       if (swi_get_observer(pedp->teval, iflag, DO_SAVE, xobs, serr) != OK)
         return ERR;
     } else {
-      for (i = 0; i <= 5; i++)
-        xobs[i] = swed->topd.xobs[i];
+      vec_copy(xobs,swed->topd.xobs,6);
     }
     /* barycentric position of observer */
-    for (i = 0; i <= 5; i++)
-      xobs[i] = xobs[i] + pedp->x[i];
+    vec_add(xobs,pedp->x,6);
   } else if (is_not_set(iflag,SEFLG_BARYCTR) && (is_not_set(iflag,SEFLG_HELCTR) ||is_not_set(iflag,SEFLG_MOSEPH))) {
     /* barycentric position of geocenter */
-    for (i = 0; i <= 5; i++)
-      xobs[i] = pedp->x[i];
+    vec_copy(xobs,pedp->x,6);
   }
   /************************************
    * position and speed at tjd        *
