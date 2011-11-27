@@ -44,13 +44,15 @@ static int generateTest( FILE* out, testFixture* test) {
   doSwissCalcHeader( out, afterHeaderPos, test, 0 );
   
   int numberOfRecords = doSwissCalcTestData( out, test );
-
+  
 // Correct SwissCalcHeader block - set number of records  
   doSwissCalcHeader( out, afterHeaderPos, test, numberOfRecords );
   
 // Goto end of file afterwards  
   fseek( out, 0, SEEK_END );
     
+  printf("%s : %d records generated\n", test->description, numberOfRecords );
+
   return OK;
 
   }
@@ -85,26 +87,22 @@ static int doSwissCalcTestData( FILE* out, testFixture* test) {
       for (int i=0;i<test->n_dates;i++) {
         scData.jd = dates[i];
         numberOfRecords++;
-        char msg[255];
-        msg[0] = '\0';
+        scData.msg[0] = '\0';
         memset( scData.result, 0, 6*sizeof( double ) ) ;
-        int iflags = swe_calc( dates[i], scData.planet, scData.flags, scData.result, msg );        
-        if (scData.flags & (SEFLG_HELCTR | SEFLG_BARYCTR)) {
-          scData.flags |= ( SEFLG_NOGDEFL | SEFLG_NOABERR );      
-          }            
-        if (iflags != scData.flags) {
+        scData.flags_ret = swe_calc( dates[i], scData.planet, scData.flags, scData.result, scData.msg );        
+        if (scData.flags_ret != scData.flags) {
           char bits1[33],bits2[33];
-          int_to_binary(bits1,iflags);
+          int_to_binary(bits1,scData.flags_ret);
           int_to_binary(bits2,scData.flags);
           printf(
-            "Flags changed! %15.10f %d %f %s : \n%32s (actual)\n%32s (requested)\n",
+            "(Warning:) Flags changed! %15.10f %d %f %s : \n%32s (actual)\n%32s (requested)\n",
             scData.jd, scData.planet,
-            scData.result[0], msg,
+            scData.result[0], scData.msg,
             bits1,
             bits2
             );
           }
-        fwrite( & scData, sizeof( scData), 1, out );
+        fwrite( & scData, sizeof( scData) , 1, out );
         }
       }
     }

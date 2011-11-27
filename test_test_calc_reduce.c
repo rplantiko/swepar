@@ -57,7 +57,13 @@ static result executeTestSet(FILE* testdata) {
       
   for (int i=0;i<scHeader.numberOfRecords;i++) {  
     bool test_ok = calcsAsExpected(  
-      scData[i].jd, scData[i].planet, scData[i].flags, scData[i].result, precisions, ""
+      scData[i].jd, 
+      scData[i].planet, 
+      scData[i].flags, 
+      scData[i].flags_ret, 
+      scData[i].result, 
+      precisions, 
+      scData[i].msg
       );  
   
     if (!test_ok) {  
@@ -75,9 +81,10 @@ static result executeTestSet(FILE* testdata) {
   }
 
 static bool calcsAsExpected(
-  double juldate,
-  int planet,
-  int flags,
+  const double juldate,
+  const int planet,
+  const int flags,
+  const int flags_ret,
   const double expectedResult[],
   const double precisions[],
   const char* expectedMessage
@@ -93,10 +100,6 @@ static bool calcsAsExpected(
       actualResult,
       actualMessage );
       
-    if (flags & (SEFLG_HELCTR | SEFLG_BARYCTR)) {
-      flags |= ( SEFLG_NOGDEFL | SEFLG_NOABERR );      
-      }    
-
   bool ok =
     diff_check_degree( "xx[0]", actualResult[0],expectedResult[0],precisions[0]);
     
@@ -105,8 +108,9 @@ static bool calcsAsExpected(
     sprintf(var,"xx[%d]",i);
     ok = ok && diff_check(var,actualResult[i],expectedResult[i],precisions[i]);
     }  
-   ok = ok && diff_check_char( "serr", actualMessage, "")   
-           && diff_check_int( "iflags", return_flags, flags );               
+   ok = ok 
+     && diff_check_char( "serr", actualMessage, expectedMessage)   
+     && diff_check_int( "iflags", return_flags, flags_ret );               
 
    return ok;
 

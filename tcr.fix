@@ -27,3 +27,9 @@ description:Moshier, heliocentric positions
 planets:1-9,14
 flags:12,268
 dates:1.1.500-31.12.1500,5,randomly  # 5 random dates for each object
+
+TESTCASE
+description:Provoking a "file not found" error
+planets:5
+flags:2  # Force Swiss Ephemeris
+jd:0  # There will be no ephemeris file for JD 0

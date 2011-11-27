@@ -7,13 +7,21 @@ typedef struct {
 
 bool test(char *filename);
 
-static void fail(char *msg);
-static bool diff_check(char *var, double act, double exp, double prec);
-static bool diff_check_int(char *var, int act, int exp);
-static bool diff_check_degree(char *var, double act, double exp, double prec);
-static bool diff_check_char(char *var, char *act, char *exp);
-static bool calcsAsExpected(double juldate, int planet, int flags, const double expectedResult[], 
-                            const double precision[], const char *expectedMessage );
+static void fail(const char *msg);
+static bool diff_check(const char *var, const double act, const double exp, const double prec);
+static bool diff_check_int(const char *var, const int act, const int exp);
+static bool diff_check_degree(const char *var, const double act, const double exp, const double prec);
+static bool diff_check_char(const char *var, const char *act, const char *exp);
+
+static bool calcsAsExpected(
+  const double juldate, 
+  const int planet, 
+  const int flags, 
+  const int flags_exp, 
+  const double expectedResult[], 
+  const double precision[], 
+  const char *expectedMessage );
+  
 static void computePrecisions( double precisions[6], int precisionsExp[6] );                          
 static result executeTestSet(FILE* testdata);
 static int hasMoreTestSets(FILE* testdata, testHeader* header);
@@ -31,30 +39,30 @@ static inline double arcdiff( double x, double y ) {
   return (d-floor(d))*deg360-deg180;
   }
 
-static inline void fail(char* msg) {
+static inline void fail(const char* msg) {
   fprintf(stderr,msg);
   exit(EXIT_FAILURE);
   }
 
-static inline bool diff_check( char* var, double act, double exp, double prec) {
+static inline bool diff_check( const char* var, const double act, const double exp, const double prec) {
   bool ok = fabs(act - exp ) < prec;  
   if (!ok) printf("\n%15s : %15.10f <> %15.10f",var,act,exp);
   return ok;
   }
 
-static inline bool diff_check_int( char* var, int act, int exp) {
+static inline bool diff_check_int( const char* var, const int act, const int exp) {
   bool ok = (act == exp);  
   if (!ok) printf("\n%15s : %d <> %d",var,act,exp);
   return ok;
   }
 
-static inline bool diff_check_degree( char* var, double act, double exp, double prec) {
+static inline bool diff_check_degree( const char* var, const double act, const double exp, const double prec) {
   bool ok = fabs(arcdiff(act,exp) ) < prec;  
   if (!ok) printf("\n%15s : %15.10f <> %15.10f",var,act,exp);
   return ok;
   }
   
-static inline bool diff_check_char( char *var, char* act, char* exp) {
+static inline bool diff_check_char( const char *var, const char* act, const char* exp) {
   bool ok = ! strcmp(act,exp);
   if (!ok) printf("\n%15s : '%s' <> '%s'",var,act,exp);
   return ok;
