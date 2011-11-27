@@ -17,6 +17,12 @@ flags:96,64,4096,8192
 jd:2424912.5 # 1.2.1927
 
 TESTCASE
+description:Obliquity of ecliptic and nutation
+planets:-1
+flags:0
+jd:2424912.5 # 1.2.1927
+
+TESTCASE
 description:Moshier, geocentric positions
 planets:0-13
 flags:4,260
@@ -33,3 +39,4 @@ description:Provoking a "file not found" error
 planets:5
 flags:2  # Force Swiss Ephemeris
 jd:0  # There will be no ephemeris file for JD 0
+

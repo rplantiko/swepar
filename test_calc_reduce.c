@@ -242,7 +242,7 @@ static int swecalc_eclnut(double tjd, int ipl, int iflag, double **x, char *serr
   (*x)[1] = swed->oec.eps;      /* mean ecliptic */
   (*x)[2] = swed->nut.nutlo[0];    /* nutation in longitude */
   (*x)[3] = swed->nut.nutlo[1];    /* nutation in obliquity */
-  for (int i = 0; i <= 3; i++) (*x)[i] *= RADTODEG;
+  //for (int i = 0; i <= 3; i++) (*x)[i] *= RADTODEG;
   return iflag;
   }
 

@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include "testdata.h"
 #include "swephexp.h"
 
@@ -49,7 +50,8 @@ typedef struct {
 static int generateTestsetFromFixture(char* fixtureFile,char* dataFile);
 static long int doGeneralHeader( FILE* out, int type, char* description );
 static void doSwissCalcHeader( FILE* out, long int pos, testFixture* test, int numberOfRecords);
-static int doSwissCalcTestData( FILE* out, testFixture* test);
+static int doSwissCalcTestData( FILE* out, testFixture* test, bool warn_on_flag_change);
+static void warn_if_flag_changed(const swissCalcData *scData); 
 static int parseFixtureFile(char* fixtureFile, testFixture*, int*);
 static void clear( testFixture* data );
 static int parseNameValuePair( char* name, char* value, testFixture* data);
