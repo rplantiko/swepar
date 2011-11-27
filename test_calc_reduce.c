@@ -227,7 +227,7 @@ static int swecalc(double tjd, int ipl, int iflag, double **x, char *serr, struc
 // --- Select computation method
   calcfun calc = swecalc_get_calc_type( ipl, iflag, serr );
   if (calc == NULL) {
-    return iflag;
+    return ERR;
     }
 
 // Apply computation method
@@ -242,7 +242,7 @@ static int swecalc_eclnut(double tjd, int ipl, int iflag, double **x, char *serr
   (*x)[1] = swed->oec.eps;      /* mean ecliptic */
   (*x)[2] = swed->nut.nutlo[0];    /* nutation in longitude */
   (*x)[3] = swed->nut.nutlo[1];    /* nutation in obliquity */
-  //for (int i = 0; i <= 3; i++) (*x)[i] *= RADTODEG;
+  smul(*x,RADTODEG,4);
   return iflag;
   }
 
@@ -568,7 +568,7 @@ calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr) {
       }
     }
 
-  sprintf(serr, "No calculation method defined for object %d, flags %d\n",ipl,iflag);
+  sprintf(serr, "illegal planet number %d.",ipl);
   return NULL;
   }
 
@@ -1996,9 +1996,11 @@ void swi_aberr_light(double *xx, double *xe, int iflag) {
   double b_1, f1, f2;
   double v2;
   double intv = PLAN_SPEED_INTV;
-  for (i = 0; i <= 5; i++)
-    u[i] = xxs[i] = xx[i];
-  ru = sqrt(square_sum(u));
+  
+  vec_copy(xxs,xx,6);
+  vec_copy(u,xx,6);
+
+  ru = vec_length(u,3);
   for (i = 0; i <= 2; i++)
     v[i] = xe[i+3] / 24.0 / 3600.0 / CLIGHT * AUNIT;
   v2 = square_sum(v);

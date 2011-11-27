@@ -6,8 +6,9 @@
 
 // --- An ephemeris test data generator, configurable with a fixture file
 
-  // Test type  
+// Test type  
 static const int SWISS_CALC_TEST = 1;
+static const int END_OF_RANGE = -10;  // negative numbers above this limit may occurs in the range 
 
 // --- Ranges (collection of single values and intervals)
 typedef struct {

@@ -82,8 +82,8 @@ static int doSwissCalcTestData( FILE* out, testFixture* test, bool warn_on_flag_
     planet_range = { &test->planets, 0, -1 },
     flags_range  = { &test->flags, 0, -1 };
   swissCalcData scData;
-  while( (scData.planet = get_next(&planet_range)) != -1) {
-    while( (scData.flags = get_next(&flags_range)) != -1) {
+  while( (scData.planet = get_next(&planet_range)) != END_OF_RANGE) {
+    while( (scData.flags = get_next(&flags_range)) != END_OF_RANGE) {
       for (int i=0;i<test->n_dates;i++) {
         scData.jd = dates[i];
         numberOfRecords++;
@@ -218,7 +218,7 @@ static int get_next( range_iterator *iter) {
   int value;
   if (iter->i >= r->size) {
     iter->i = 0;
-    return -1;
+    return END_OF_RANGE;
     }
   if (r->line[iter->i].between) {
     if (iter->j == -1) {
