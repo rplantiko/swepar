@@ -118,19 +118,26 @@ int se_calc( double tjd, int ipl, int iflag, double *xx, char *serr, struct swe_
 
   int iflag_act = iflag,
       ephemeris_requested = iflag & SEFLG_EPHMASK,
-      ipl_act   = ipl;
+      ipl_act   = ipl,
+      retc;
+      
+  if ((retc = setjmp(swed->env))==0) {    
 
-  se_calc_prepare( tjd, &ipl_act, &iflag_act, xx, serr, swed);
-  if (iflag_act==ERR) return ERR;
-
-  double xint[24];  // Default result area for ephemeris computation
-  double *xp = xint;
-
-  int iflag_ret = swecalc(tjd, ipl_act, iflag_act, & xp, serr, swed);
-  return iflag_ret >= 0 ?
-           se_calc_map_results( ipl_act, iflag_ret, ephemeris_requested, xp, xx )
-           : ERR;
-
+    se_calc_prepare( tjd, &ipl_act, &iflag_act, xx, serr, swed);
+    if (iflag_act==ERR) return ERR;
+    
+    double xint[24];  // Default result area for ephemeris computation
+    double *xp = xint;
+    
+    int iflag_ret = swecalc(tjd, ipl_act, iflag_act, & xp, serr, swed);
+    return iflag_ret >= 0 ?
+             se_calc_map_results( ipl_act, iflag_ret, ephemeris_requested, xp, xx )
+             : ERR;
+             
+    } 
+  else { 
+    return retc;
+    }    
 }
 
 // Prepare flags
@@ -1205,9 +1212,8 @@ FILE *swid_fopen(int ifno, char *fname, char *ephepath, char *serr, struct swe_d
   }
   sprintf(s, "SwissEph file '%s' not found in PATH '%s'", fname, ephepath);
   s[AS_MAXCH-1] = '\0';    /* s may be longer then AS_MAXCH */
-  if (serr != NULL)
-    strcpy(serr, s);
-  return NULL;
+  throw( ERR, s, serr, swed );
+  return NULL;  // will never be reached
 }
 
 /* converts planets from barycentric to geocentric,

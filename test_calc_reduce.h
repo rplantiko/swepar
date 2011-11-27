@@ -1,6 +1,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <stdbool.h>
+
 #include "swejpl.h"
 #include "swephexp.h"
 #include "sweph.h"
@@ -403,5 +404,12 @@ static inline int get_ipli( int ipl ) {
 static inline bool is_main_asteroid( int ipli ) {
   return ipli < SE_AST_OFFSET;
   }
+
+static inline void throw(int retc, char* msg, char *serr, struct swe_data* swed) {
+  msg_append( serr, msg );
+  longjmp( swed->env, retc);  
+  }  
+
+
 
   

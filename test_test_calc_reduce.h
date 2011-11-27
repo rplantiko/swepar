@@ -66,8 +66,6 @@ static inline bool diff_check_char( const char *var, const char* act, const char
   bool ok = ! strcmp(act,exp);
   if (!ok) printf("\n%15s : '%s' <> '%s'",var,act,exp);
   return ok;
-  }   
-
-
+  }
 
 
