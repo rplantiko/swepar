@@ -2909,11 +2909,10 @@ static void read_const(int ifno, char *serr, struct swe_data *swed)
         }
       }
       pdp->refep = (double *) malloc((size_t) pdp->ncoe * 2 * 8);
-      do_fread((void *) pdp->refep, 8, 2*pdp->ncoe, 8, &fc);
-      
-    }  
+      do_fread((void *) pdp->refep, 8, 2*pdp->ncoe, 8, &fc);      
+      }  
+    }
   }
-}
 
 static void read_astnam( char* astnam, char* sastnam, int lastnam, struct file_context *fc) {
     char sastno[12];
@@ -4640,81 +4639,28 @@ const char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_da
     strcpy(s, swed->saved_planet_name);
     return s;
   }
+  if (ipl <= SE_NPLANETS) {
+    strcpy(s,plnam[ipl]);
+    }
+  else {
   switch(ipl) {
-    case SE_SUN:
-      strcpy(s, SE_NAME_SUN);
-      break;
-    case SE_MOON:
-      strcpy(s, SE_NAME_MOON);
-      break;
-    case SE_MERCURY:
-      strcpy(s, SE_NAME_MERCURY);
-      break;
-    case SE_VENUS:
-      strcpy(s, SE_NAME_VENUS);
-      break;
-    case SE_MARS:
-      strcpy(s, SE_NAME_MARS);
-      break;
-    case SE_JUPITER:
-      strcpy(s, SE_NAME_JUPITER);
-      break;
-    case SE_SATURN:
-      strcpy(s, SE_NAME_SATURN);
-      break;
-    case SE_URANUS:
-      strcpy(s, SE_NAME_URANUS);
-      break;
-    case SE_NEPTUNE:
-      strcpy(s, SE_NAME_NEPTUNE);
-      break;
-    case SE_PLUTO:
-      strcpy(s, SE_NAME_PLUTO);
-      break;
-    case SE_MEAN_NODE:
-      strcpy(s, SE_NAME_MEAN_NODE);
-      break;
-    case SE_TRUE_NODE:
-      strcpy(s, SE_NAME_TRUE_NODE);
-      break;
-    case SE_MEAN_APOG:
-      strcpy(s, SE_NAME_MEAN_APOG);
-      break;
-    case SE_OSCU_APOG:
-      strcpy(s, SE_NAME_OSCU_APOG);
-      break;
-    case SE_INTP_APOG:
-      strcpy(s, SE_NAME_INTP_APOG);
-      break;
-    case SE_INTP_PERG:
-      strcpy(s, SE_NAME_INTP_PERG);
-      break;
-    case SE_EARTH:
-      strcpy(s, SE_NAME_EARTH);
-      break;
-    case SE_CHIRON:
     case SE_AST_OFFSET + MPC_CHIRON:
-      strcpy(s, SE_NAME_CHIRON);
+      strcpy(s, plnam[SE_CHIRON]);
       break;
-    case SE_PHOLUS:
     case SE_AST_OFFSET + MPC_PHOLUS:
-      strcpy(s, SE_NAME_PHOLUS);
+      strcpy(s, plnam[SE_PHOLUS]);
       break;
-    case SE_CERES:
     case SE_AST_OFFSET + MPC_CERES:
-      strcpy(s, SE_NAME_CERES);
+      strcpy(s, plnam[SE_CERES]);
       break;
-    case SE_PALLAS:
     case SE_AST_OFFSET + MPC_PALLAS:
-      strcpy(s, SE_NAME_PALLAS);
+      strcpy(s, plnam[SE_PALLAS]);
       break;
-    case SE_JUNO:
     case SE_AST_OFFSET + MPC_JUNO:
-      strcpy(s, SE_NAME_JUNO);
+      strcpy(s, plnam[SE_JUNO]);
       break;
-    case SE_VESTA:
     case SE_AST_OFFSET + MPC_VESTA:
-      strcpy(s, SE_NAME_VESTA);
+      strcpy(s, plnam[SE_VESTA]);
       break;
     default:
       /* fictitious planets */
@@ -4725,16 +4671,16 @@ const char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_da
       /* asteroids */
       if (ipl > SE_AST_OFFSET) {
   /* if name is already available */
-  if (ipl == swed->fidat[SEI_FILE_ANY_AST].ipl[0])
-    strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);
-        /* else try to get it from ephemeris file */
-  else {
-    retc = sweph(J2000, ipl, SEI_FILE_ANY_AST, 0, NULL, NO_SAVE, xp, NULL,swed);
-    if (retc != ERR && retc != NOT_AVAILABLE)
-      strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);
-    else
-      sprintf(s, "%d: not found", ipl - SE_AST_OFFSET);
-  }
+        if (ipl == swed->fidat[SEI_FILE_ANY_AST].ipl[0])
+          strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);
+          /* else try to get it from ephemeris file */
+        else {
+          retc = sweph(J2000, ipl, SEI_FILE_ANY_AST, 0, NULL, NO_SAVE, xp, NULL,swed);
+          if (retc != ERR && retc != NOT_AVAILABLE)
+            strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);
+          else
+            sprintf(s, "%d: not found", ipl - SE_AST_OFFSET);
+          }
         /* If there is a provisional designation only in ephemeris file,
          * we look for a name in seasnam.txt, which can be updated by
          * the user.
@@ -4786,6 +4732,7 @@ const char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_da
   sprintf(s, "%d", i);
       }
       break;
+    }
   }
   if (strlen(s) < 80) {
     swed->i_saved_planet_name = ipl;

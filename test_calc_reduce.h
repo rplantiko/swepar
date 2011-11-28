@@ -432,6 +432,28 @@ static inline void throw(int retc, char* msg, char *serr, struct swe_data* swed)
   longjmp( swed->env, retc);  
   }  
 
-
-
-  
+const char* plnam[SE_NPLANETS] = {
+  SE_NAME_SUN,
+  SE_NAME_MOON,
+  SE_NAME_MERCURY,
+  SE_NAME_VENUS,
+  SE_NAME_MARS,
+  SE_NAME_JUPITER,
+  SE_NAME_SATURN,
+  SE_NAME_URANUS,
+  SE_NAME_NEPTUNE,
+  SE_NAME_PLUTO,
+  SE_NAME_MEAN_NODE,
+  SE_NAME_TRUE_NODE,
+  SE_NAME_MEAN_APOG,
+  SE_NAME_OSCU_APOG,
+  SE_NAME_EARTH,
+  SE_NAME_CHIRON,
+  SE_NAME_PHOLUS,
+  SE_NAME_CERES,
+  SE_NAME_PALLAS,
+  SE_NAME_JUNO,
+  SE_NAME_VESTA,
+  SE_NAME_INTP_APOG,
+  SE_NAME_INTP_PERG
+  };
