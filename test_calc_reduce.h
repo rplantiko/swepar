@@ -91,7 +91,7 @@ struct swe_data FAR swed = {FALSE,	/* ephe_path_is_set = FALSE */
  * constants *
  *************/
 
-static char *ayanamsa_name[] = {
+const char *ayanamsa_name[] = {
    "Fagan/Bradley",
    "Lahiri",
    "De Luce",
@@ -246,7 +246,7 @@ static int swemoon(double tjd, int iflag, AS_BOOL do_save, double *xp, char *ser
 static int sweph(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BOOL do_save, 
 		double *xp, char *serr, struct swe_data *swed);
 static void rot_back(int ipl, struct swe_data *swed);
-static int read_const(int ifno, char *serr, struct swe_data *swed);
+static void read_const(int ifno, char *serr, struct swe_data *swed);
 static void embofs(double *xemb, double *xmoon);
 static int app_pos_etc_plan(int ipli, int iflag, char *serr, struct swe_data *swed);
 static int app_pos_etc_plan_osc(int ipl, int ipli, int iflag, char *serr, struct swe_data *swed);
@@ -268,11 +268,15 @@ void FAR PASCAL_CONV swed_set_sid_mode(int sid_mode, double t0, double ayan_t0, 
 static int app_pos_rest(struct plan_data *pdp, int iflag, 
     double *xx, double *x2000, struct epsilon *oe, char *serr, struct swe_data *swed);
 
+static void throw_file_damaged(struct file_data *fdp, char* serr, struct swe_data *swed);
+static void throw_file_read_error(struct file_data *fdp, char* serr, struct swe_data *swed);
+static void throw_file_error(struct file_data *fdp, char* msg, char* serr, struct swe_data *swed);
+
 // Functions that are declared elswhere and have to be decorated with a pointer to swed
 FILE *swid_fopen(int ifno, char *fname, char *ephepath, char *serr, struct swe_data *swed);
 int swed_fixstar(char *star, double tjd, int iflag, double *xx, char *serr, struct swe_data *swed);
 int swed_fixstar_mag(char *star, double *mag, char *serr, struct swe_data *swed);
-char *swed_get_planet_name(int ipl, char *s, struct swe_data *swed);
+const char *swed_get_planet_name(int ipl, char *s, struct swe_data *swed);
 void swed_set_topo(double geolon, double geolat, double geoalt, struct swe_data *swed);
 void swed_set_sid_mode(int sid_mode, double t0, double ayan_t0, struct swe_data *swed);
 double swed_get_ayanamsa(double tjd_et, struct swe_data *swed);

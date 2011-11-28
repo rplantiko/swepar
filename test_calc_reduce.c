@@ -95,13 +95,13 @@ int FAR PASCAL_CONV swe_fixstar_mag(char *star, double *mag, char *serr)
 
 char *FAR PASCAL_CONV swe_get_planet_name(int ipl, char *s)
 {
-  return swed_get_planet_name(ipl,s,&swed);
+  return (char*)swed_get_planet_name(ipl,s,&swed); // discard 'const' by cast (only for compatibility)
 }
 
 char *FAR PASCAL_CONV swe_get_ayanamsa_name(int isidmode)
 {
   return (isidmode < SE_NSIDM_PREDEF) ?
-      ayanamsa_name[isidmode] : NULL;
+      (char*)ayanamsa_name[isidmode] : NULL;  // discard 'const' by cast (only for compatibility)
 }
 
 void FAR PASCAL_CONV swe_set_topo(double geolon, double geolat, double geoalt)
@@ -1039,7 +1039,7 @@ static int sweph(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BO
     }
     strcpy(s, fname);
 again:
-    fdp->fptr = swi_fopen(ifno, s, swed->ephepath, serr);
+    fdp->fptr = swid_fopen(ifno, s, swed->ephepath, serr, swed);
     if (fdp->fptr == NULL) {
       /*
        * if it is a numbered asteroid file, try also for short files (..s.se1)
@@ -1069,10 +1069,10 @@ again:
     }
     /* during the search error messages may have been built, delete them */
     if (serr != NULL) *serr = '\0';
-    retc = read_const(ifno, serr, swed);
-    if (retc != OK)
-      return(retc);
+    read_const(ifno, serr, swed);
+
   }
+
   /* if first ephemeris file (J-3000), it might start a mars period
    * after -3000. if last ephemeris file (J3000), it might end a
    * 4000-day-period before 3000. */
@@ -2736,10 +2736,10 @@ static int get_new_segment(double tjd, int ipli, int ifno, char *serr, struct sw
  * ifno         file #
  * serr         error string
  */
-static int read_const(int ifno, char *serr, struct swe_data *swed)
+static void read_const(int ifno, char *serr, struct swe_data *swed)
 {
   char *c, c2, *sp;
-  char s[AS_MAXCH*2], s2[AS_MAXCH];
+  char s[AS_MAXCH*2], s2[AS_MAXCH], msg[AS_MAXCH];
   char sastnam[41];
   int i, ipli, kpl;
   int retc;
@@ -2754,8 +2754,6 @@ static int read_const(int ifno, char *serr, struct swe_data *swed)
   double doubles[20];
   struct plan_data *pdp;
   struct file_data *fdp = &swed->fidat[ifno];
-  char *serr_file_damage = "Ephemeris file %s is damaged. ";
-  int errmsglen = strlen(serr_file_damage) + strlen(fdp->fnam);
   int nbytes_ipl = 2;
   fp = fdp->fptr;
   /*************************************
@@ -2763,22 +2761,22 @@ static int read_const(int ifno, char *serr, struct swe_data *swed)
    *************************************/
   sp = fgets(s, AS_MAXCH, fp);
   if (sp == NULL || strstr(sp, "\r\n") == NULL)
-    goto file_damage;
+    throw_file_damaged(fdp,serr,swed);
   sp = strchr(s, '\r');
   *sp = '\0';
   sp = s;
   while (isdigit((int) *sp) == 0 && *sp != '\0')
     sp++;
-  if (*sp == '\0')
-    goto file_damage;
+  if (*sp == '\0') throw_file_damaged( fdp, serr, swed);
+
   /* version unused so far */
   fdp->fversion = atoi(sp);
   /*************************************
    * correct file name?                *
    *************************************/
   sp = fgets(s, AS_MAXCH, fp);
-  if (sp == NULL || strstr(sp, "\r\n") == NULL)
-    goto file_damage;
+  if (sp == NULL || strstr(sp, "\r\n") == NULL) 
+    throw_file_damaged( fdp, serr, swed);
   /* file name, without path */
   sp = strrchr(fdp->fnam, (int) *DIR_GLUE);
   if (sp == NULL)
@@ -2798,23 +2796,22 @@ static int read_const(int ifno, char *serr, struct swe_data *swed)
   for (sp = s; *sp != '\0'; sp++)
     *sp = tolower((int) *sp);
   if (strcmp(s2, s) != 0) {
-    if (serr != NULL)
-      sprintf(serr, "Ephemeris file name '%s' wrong; rename '%s' ", s2, s);
-    goto return_error;
+    sprintf(msg, "Ephemeris file name '%s' wrong; rename '%s' ", s2, s);
+    throw_file_error(fdp,msg,serr,swed);
   }
   /*************************************
    * copyright                         *
    *************************************/
   sp = fgets(s, AS_MAXCH, fp);
   if (sp == NULL || strstr(sp, "\r\n") == NULL)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
   /****************************************
    * orbital elements, if single asteroid *
    ****************************************/
   if (ifno == SEI_FILE_ANY_AST) {
     sp = fgets(s, AS_MAXCH * 2, fp);
     if (sp == NULL || strstr(sp, "\r\n") == NULL)
-      goto file_damage;
+      throw_file_damaged( fdp, serr, swed);
     /* MPC number and name; will be analyzed below:
      * search "asteroid name" */
     while(*sp == ' ') sp++;
@@ -2842,7 +2839,7 @@ static int read_const(int ifno, char *serr, struct swe_data *swed)
    * one int for test of byte order   *
    *************************************/
   if (fread((void *) &testendian, 4, 1, fp) != 1)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
   /* is byte order correct?            */
   if (testendian == SEI_FILE_TEST_ENDIAN)
     freord = SEI_FILE_NOREORD;
@@ -2853,7 +2850,7 @@ static int read_const(int ifno, char *serr, struct swe_data *swed)
     for (i = 0; i < 4; i++)
       *(sp+i) = *(c+3-i);
     if (lng != SEI_FILE_TEST_ENDIAN)
-      goto file_damage;
+      throw_file_damaged( fdp, serr, swed);
       /* printf("%d  %x\n", lng, lng);*/
   }
   /* is file bigendian or littlendian?
@@ -2869,45 +2866,44 @@ static int read_const(int ifno, char *serr, struct swe_data *swed)
    * length of file correct?           *
    *************************************/
   retc = do_fread((void *) &lng, 4, 1, 4, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK) return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
   fpos = ftell(fp);
   if (fseek(fp, 0L, SEEK_END) != 0)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
   flen = ftell(fp);
   if (lng != flen)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
   /**********************************************************
    * DE number of JPL ephemeris which this file is based on *
    **********************************************************/
   retc = do_fread((void *) &fdp->sweph_denum, 4, 1, 4, fp, fpos, freord, fendian, ifno, serr, swed);
-  if (retc != OK) return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
   swed->jpldenum = fdp->sweph_denum;
   /*************************************
    * start and end epoch of file       *
    *************************************/
   retc = do_fread((void *) &fdp->tfstart, 8, 1, 8, fp, SEI_CURR_FPOS,freord, fendian, ifno, serr, swed);
-  if (retc != OK) return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
   retc = do_fread((void *) &fdp->tfend, 8, 1, 8, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK) return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
   
   /*************************************
    * how many planets are in file?     *
    *************************************/
   retc = do_fread((void *) &nplan, 2, 1, 2, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
   if (nplan > 256) {
     nbytes_ipl = 4;
     nplan %= 256;
   }
   if (nplan < 1 || nplan > 20)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
   fdp->npl = nplan;
   /* which ones?                       */
   retc = do_fread((void *) fdp->ipl, nbytes_ipl, (int) nplan, sizeof(int), fp, SEI_CURR_FPOS,
 freord, fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
   /*************************************
    * asteroid name                     *
    *************************************/
@@ -2927,12 +2923,12 @@ freord, fendian, ifno, serr, swed);
       strncpy(fdp->astnam, sastnam+j+1, lastnam);
       /* overread old ast. name field */
       if (fread((void *) s, 30, 1, fp) != 1)
-        goto file_damage;
+        throw_file_damaged( fdp, serr, swed);
     } else {
       /* older elements record structure: the name
        * is taken from old name field */
       if (fread((void *) fdp->astnam, 30, 1, fp) != 1)
-        goto file_damage;
+        throw_file_damaged( fdp, serr, swed);
     }
     /* in worst case strlen of not null terminated area! */
     i = strlen(fdp->astnam) - 1;
@@ -2951,17 +2947,17 @@ freord, fendian, ifno, serr, swed);
   /* read CRC from file */
   retc = do_fread((void *) &ulng, 4, 1, 4, fp, SEI_CURR_FPOS, freord,
 fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
   /* read check area from file */
   fseek(fp, 0L, SEEK_SET);
   /* must check that defined length of s is less than fpos */
   if (fpos - 1 > 2 * AS_MAXCH)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
   if (fread((void *) s, (size_t) fpos, 1, fp) != 1)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
   if (swi_crc32((unsigned char *) s, (int) fpos) != ulng)
-    goto file_damage;
+    throw_file_damaged( fdp, serr, swed);
     /*printf("crc %d %d\n", ulng2, ulng);*/
   fseek(fp, fpos+4, SEEK_SET);
   /*************************************
@@ -2971,8 +2967,8 @@ fendian, ifno, serr, swed);
    * these constants are currently not in use */
   retc = do_fread((void *) &doubles[0], 8, 5, 8, fp, SEI_CURR_FPOS, freord,
 fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
+  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
   swed->gcdat.clight       = doubles[0];
   swed->gcdat.aunit        = doubles[1];
   swed->gcdat.helgravconst = doubles[2];
@@ -2992,31 +2988,30 @@ fendian, ifno, serr, swed);
     /* file position of planet's index */
     retc = do_fread((void *) &pdp->lndx0, 4, 1, 4, fp, SEI_CURR_FPOS,
 freord, fendian, ifno, serr, swed);
-    if (retc != OK)
-      return (retc);
+    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
     /* flags: helio/geocentric, rotation, reference ellipse */
     retc = do_fread((void *) &pdp->iflg, 1, 1, sizeof(int), fp,
 SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-    if (retc != OK)
-      return (retc);
+    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
     /* number of chebyshew coefficients / segment  */
     /* = interpolation order +1                    */
     retc = do_fread((void *) &pdp->ncoe, 1, 1, sizeof(int), fp,
 SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-    if (retc != OK)
-      return (retc);
+    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
     /* rmax = normalisation factor */
     retc = do_fread((void *) &lng, 4, 1, 4, fp, SEI_CURR_FPOS, freord,
 fendian, ifno, serr, swed);
-    if (retc != OK)
-      return (retc);
+    if (retc != OK)  throw_file_read_error(fdp,serr,swed);
     pdp->rmax = lng / 1000.0;
     /* start and end epoch of planetary ephemeris,   */
     /* segment length, and orbital elements          */
     retc = do_fread((void *) doubles, 8, 10, 8, fp, SEI_CURR_FPOS, freord,
 fendian, ifno, serr, swed);
-    if (retc != OK)
-      return (retc);
+    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
     pdp->tfstart  = doubles[0];
     pdp->tfend    = doubles[1];
     pdp->dseg     = doubles[2];
@@ -3041,21 +3036,29 @@ fendian, ifno, serr, swed);
       pdp->refep = (double *) malloc((size_t) pdp->ncoe * 2 * 8);
       retc = do_fread((void *) pdp->refep, 8, 2*pdp->ncoe, 8, fp,
 SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-      if (retc != OK)
-        return (retc);
+      if (retc != OK) throw_file_read_error(fdp,serr,swed);
+
     }/**/
   }
-  return(OK);
-file_damage:
-  if (serr != NULL && errmsglen < AS_MAXCH)
-    sprintf(serr, serr_file_damage, fdp->fnam);
-  else
-    sprintf(serr, serr_file_damage, "");
-return_error:
-  fclose(fp);
-  fp = NULL;
-  return(ERR);
+
 }
+
+static void throw_file_damaged(struct file_data *fdp, char* serr, struct swe_data *swed) {
+  char *serr_file_damage = "Ephemeris file %s is damaged.";
+  char msg[AS_MAXCH];
+  int errmsglen = strlen(serr_file_damage) + strlen(fdp->fnam);
+  sprintf(msg, serr_file_damage, (errmsglen < AS_MAXCH) ? fdp->fnam : "" );
+  throw_file_error(fdp,msg,serr,swed);
+  }
+
+static void throw_file_read_error(struct file_data *fdp, char* serr, struct swe_data *swed) {
+  throw_file_error(fdp,"File Error while reading data",serr,swed);
+  }
+
+static void throw_file_error(struct file_data *fdp, char* msg, char* serr, struct swe_data *swed) {
+  fclose(fdp->fptr);
+  throw(ERR,msg,serr,swed);
+  }
 
 /* SWISSEPH
  * reads from a file and, if necessary, reorders bytes
@@ -4191,9 +4194,9 @@ int FAR PASCAL_CONV swed_fixstar(char *star, double tjd, int iflag,
    * Comment lines start with # and are ignored.
    ******************************************************/
   if (swed->fixfp == NULL) {
-    if ((swed->fixfp = swi_fopen(SEI_FILE_FIXSTAR, SE_STARFILE, swed->ephepath, serr)) == NULL) {
+    if ((swed->fixfp = swid_fopen(SEI_FILE_FIXSTAR, SE_STARFILE, swed->ephepath, serr, swed)) == NULL) {
       swed->is_old_starfile = TRUE;
-      if ((swed->fixfp = swi_fopen(SEI_FILE_FIXSTAR, SE_STARFILE_OLD, swed->ephepath, NULL)) == NULL) {
+      if ((swed->fixfp = swid_fopen(SEI_FILE_FIXSTAR, SE_STARFILE_OLD, swed->ephepath, NULL, swed)) == NULL) {
   retc = ERR;
   goto return_err;
       }
@@ -4552,7 +4555,7 @@ int FAR PASCAL_CONV swed_fixstar_mag(char *star, double *mag, char *serr, struct
    * Comment lines start with # and are ignored.
    ******************************************************/
   if (swed->fixfp == NULL) {
-    if ((swed->fixfp = swi_fopen(SEI_FILE_FIXSTAR, SE_STARFILE, swed->ephepath, serr)) == NULL) {
+    if ((swed->fixfp = swid_fopen(SEI_FILE_FIXSTAR, SE_STARFILE, swed->ephepath, serr,swed)) == NULL) {
       retc = ERR;
       goto return_err;
     }
@@ -4640,7 +4643,7 @@ int FAR PASCAL_CONV swed_fixstar_mag(char *star, double *mag, char *serr, struct
   return retc;
 }
 
-char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_data *swed)
+const char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_data *swed)
 {
   int i;
   int retc;
@@ -4766,7 +4769,7 @@ char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_data *sw
           int ipli = (int) (ipl - SE_AST_OFFSET), iplf = 0;
           FILE *fp;
           char si[AS_MAXCH], *sp, *sp2;
-          if ((fp = swi_fopen(-1, SE_ASTNAMFILE, swed->ephepath, NULL)) != NULL) {
+          if ((fp = swid_fopen(-1, SE_ASTNAMFILE, swed->ephepath, NULL, swed)) != NULL) {
             while(ipli != iplf && (sp = fgets(si, AS_MAXCH, fp)) != NULL) {
               while (*sp == ' ' || *sp == '\t'
                      || *sp == '(' || *sp == '[' || *sp == '{')
@@ -4845,9 +4848,7 @@ int swid_get_observer(double tjd, int iflag,
   double re = EARTH_RADIUS;
   double cosfi, sinfi, cc, ss, cosl, sinl, h;
   if (!swed->geopos_is_set) {
-    if (serr != NULL)
-      strcpy(serr, "geographic position has not been set");
-    return ERR;
+    throw(ERR,"geographic position has not been set",serr,swed);
   }
   /* geocentric position of observer depends on sidereal time,
    * which depends on UT.
