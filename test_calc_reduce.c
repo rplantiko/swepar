@@ -1,7 +1,6 @@
 // Experimental - trying to reduce the planet calculation
 
 #include "test_calc_reduce.h"
-
 #include "test_test_calc_reduce.c"
 
 int main( int argc, char ** argv ) {
@@ -1094,8 +1093,7 @@ again:
    ******************************/
   /* get new segment, if necessary */
   if (pdp->segp == NULL || tjd < pdp->tseg0 || tjd > pdp->tseg1) {
-    retc = get_new_segment(tjd, ipl, ifno, serr, swed);
-    if (retc != OK) return(retc);
+    get_new_segment(tjd, ipl, ifno, serr, swed);
     /* rotate cheby coeffs back to equatorial system.
      * if necessary, add reference orbit. */
     if (pdp->iflg & SEI_FLG_ROTATE)
@@ -2600,9 +2598,9 @@ static int app_pos_etc_mean(int ipl, int iflag, char *serr, struct swe_data *swe
  * ifno    file number
  * serr    error string
  */
-static int get_new_segment(double tjd, int ipli, int ifno, char *serr, struct swe_data *swed)
-{
-  int i, j, k, m, n, o, icoord, retc;
+static void get_new_segment(double tjd, int ipli, int ifno, char *serr, struct swe_data *swed) {
+
+  int i, j, k, m, n, o, icoord;
   int iseg;
   int fpos;
   int nsizes, nsize[6];
@@ -2612,38 +2610,36 @@ static int get_new_segment(double tjd, int ipli, int ifno, char *serr, struct sw
   struct plan_data *pdp = &swed->pldat[ipli];
   struct file_data *fdp = &swed->fidat[ifno];
   FILE *fp = fdp->fptr;
-  int freord  = (int) fdp->iflg & SEI_FILE_REORD;
-  int fendian = (int) fdp->iflg & SEI_FILE_LITENDIAN;
   uint32 longs[MAXORD+1];
+  
+  struct file_context fc = set_file_context(ifno,serr,swed);
+      
   /* compute segment number */
   iseg = (int) ((tjd - pdp->tfstart) / pdp->dseg);
-  /*if (tjd - pdp->tfstart < 0)
-      return(NOT_AVAILABLE);*/
   pdp->tseg0 = pdp->tfstart + iseg * pdp->dseg;
   pdp->tseg1 = pdp->tseg0 + pdp->dseg;
+
   /* get file position of coefficients from file */
   fpos = pdp->lndx0 + iseg * 3;
-  retc = do_fread((void *) &fpos, 3, 1, 4, fp, fpos, freord, fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
   fseek(fp, fpos, SEEK_SET);
+  do_fread((void *) &fpos, 3, 1, 4, &fc);
+  fseek(fp, fpos, SEEK_SET);
+  
   /* clear space of chebyshew coefficients */
   if (pdp->segp == NULL)
     pdp->segp = (double *) malloc((size_t) pdp->ncoe * 3 * 8);
+    
   memset((void *) pdp->segp, 0, (size_t) pdp->ncoe * 3 * 8);
+  
   /* read coefficients for 3 coordinates */
   for (icoord = 0; icoord < 3; icoord++) {
     idbl = icoord * pdp->ncoe;
     /* first read header */
     /* first bit indicates number of sizes of packed coefficients */
-    retc = do_fread((void *) &c[0], 1, 2, 1, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-    if (retc != OK)
-      return (retc);
+    do_fread((void *) &c[0], 1, 2, 1, &fc);
     if (c[0] & 128) {
       nsizes = 6;
-      retc = do_fread((void *) (c+2), 1, 2, 1, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-      if (retc != OK)
-  return (retc);
+      do_fread((void *) (c+2), 1, 2, 1, &fc);
       nsize[0] = (int) c[1] / 16;
       nsize[1] = (int) c[1] % 16;
       nsize[2] = (int) c[2] / 16;
@@ -2661,75 +2657,85 @@ static int get_new_segment(double tjd, int ipli, int ifno, char *serr, struct sw
     }
     /* there may not be more coefficients than interpolation
      * order + 1 */
-    if (nco > pdp->ncoe) {
-      if (serr != NULL) {
-  sprintf(serr, "error in ephemeris file: %d coefficients instead of %d. ", nco, pdp->ncoe);
-  if (strlen(serr) + strlen(fdp->fnam) < AS_MAXCH - 1)
-    sprintf(serr, "error in ephemeris file %s: %d coefficients instead of %d. ", fdp->fnam, nco, pdp->ncoe);
-      }
-      free(pdp->segp);
-      pdp->segp = NULL;
-      return (ERR);
-    }
+    if (nco > pdp->ncoe) throw_coeff_error(nco,pdp,&fc);
+
     /* now unpack */
     for (i = 0; i < nsizes; i++) {
-      if (nsize[i] == 0)
-  continue;
+      if (nsize[i] == 0) continue;
       if (i < 4) {
-  j = (4 - i);
-  k = nsize[i];
-  retc = do_fread((void *) &longs[0], j, k, 4, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
-  for (m = 0; m < k; m++, idbl++) {
-    if (longs[m] & 1)   /* will be negative */
-      pdp->segp[idbl] = -(((longs[m]+1) / 2) / 1e+9 * pdp->rmax / 2);
-    else
-      pdp->segp[idbl] = (longs[m] / 2) / 1e+9 * pdp->rmax / 2;
-  }
-      } else if (i == 4) {    /* half byte packing */
-  j = 1;
-  k = (nsize[i] + 1) / 2;
-  retc = do_fread((void *) longs, j, k, 4, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
-  for (m = 0, j = 0;
-       m < k && j < nsize[i];
-       m++) {
-    for (n = 0, o = 16;
-         n < 2 && j < nsize[i];
-         n++, j++, idbl++, longs[m] %= o, o /= 16) {
-      if (longs[m] & o)
-        pdp->segp[idbl] =
-       -(((longs[m]+o) / o / 2) * pdp->rmax / 2 / 1e+9);
-      else
-        pdp->segp[idbl] = (longs[m] / o / 2) * pdp->rmax / 2 / 1e+9;
-    }
-  }
-      } else if (i == 5) {    /* quarter byte packing */
-  j = 1;
-  k = (nsize[i] + 3) / 4;
-  retc = do_fread((void *) longs, j, k, 4, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK)
-    return (retc);
-  for (m = 0, j = 0;
-       m < k && j < nsize[i];
-       m++) {
-    for (n = 0, o = 64;
-         n < 4 && j < nsize[i];
-         n++, j++, idbl++, longs[m] %= o, o /= 4) {
-      if (longs[m] & o)
-        pdp->segp[idbl] =
-       -(((longs[m]+o) / o / 2) * pdp->rmax / 2 / 1e+9);
-      else
-        pdp->segp[idbl] = (longs[m] / o / 2) * pdp->rmax / 2 / 1e+9;
-    }
-  }
+        j = (4 - i);
+        k = nsize[i];
+        do_fread((void *) &longs[0], j, k, 4, &fc);
+        for (m = 0; m < k; m++, idbl++) {
+          if (longs[m] & 1)   /* will be negative */
+            pdp->segp[idbl] = -(((longs[m]+1) / 2) / 1e+9 * pdp->rmax / 2);
+          else
+            pdp->segp[idbl] = (longs[m] / 2) / 1e+9 * pdp->rmax / 2;
+          }
+        } 
+      else if (i == 4) {    /* half byte packing */
+        j = 1;
+        k = (nsize[i] + 1) / 2;
+        do_fread((void *) longs, j, k, 4, &fc);
+        for (m = 0, j = 0;
+             m < k && j < nsize[i];
+             m++) {
+          for (n = 0, o = 16;
+               n < 2 && j < nsize[i];
+               n++, j++, idbl++, longs[m] %= o, o /= 16) {
+            if (longs[m] & o)
+              pdp->segp[idbl] = -(((longs[m]+o) / o / 2) * pdp->rmax / 2 / 1e+9);
+            else
+              pdp->segp[idbl] = (longs[m] / o / 2) * pdp->rmax / 2 / 1e+9;
+            } 
+          }
+        } 
+      else if (i == 5) {    /* quarter byte packing */
+        j = 1;
+        k = (nsize[i] + 3) / 4;
+        do_fread((void *) longs, j, k, 4, &fc);
+        for (m = 0, j = 0;
+             m < k && j < nsize[i];
+             m++) {
+          for (n = 0, o = 64;
+               n < 4 && j < nsize[i];
+               n++, j++, idbl++, longs[m] %= o, o /= 4) {
+            if (longs[m] & o)
+              pdp->segp[idbl] = -(((longs[m]+o) / o / 2) * pdp->rmax / 2 / 1e+9);
+            else
+              pdp->segp[idbl] = (longs[m] / o / 2) * pdp->rmax / 2 / 1e+9;
+            }
+          }
+        }
       }
     }
   }
-  return(OK);
-}
+
+static struct file_context set_file_context( int ifno, char* serr, struct swe_data *swed) {  
+  struct file_context fc;
+  struct file_data *fdp = &swed->fidat[ifno];
+  fc.ifno = ifno;
+  fc.serr = serr;
+  fc.swed = swed;
+  fc.fp   = fdp->fptr;
+  fc.fdp  = fdp;    
+// reord and endian are undefined before read_const()  
+  fc.freord = (int) fdp->iflg & SEI_FILE_REORD;
+  fc.fendian = (int) fdp->iflg & SEI_FILE_LITENDIAN;
+  fc.fpos = SEI_CURR_FPOS;    
+  return fc;
+  }
+  
+
+static void throw_coeff_error(int nco,struct plan_data *pdp,struct file_context *fc) {
+  char msg[AS_MAXCH];
+  sprintf(msg,"error in ephemeris file: %d coefficients instead of %d. ", nco, pdp->ncoe);
+  if (strlen(msg) + strlen(fc->fdp->fnam) < AS_MAXCH - 1)
+    sprintf(msg, "error in ephemeris file %s: %d coefficients instead of %d. ", fc->fdp->fnam, nco, pdp->ncoe);
+  free(pdp->segp);
+  pdp->segp = NULL;
+  throw_file_error(fc->fp,msg,fc->serr,fc->swed);
+  }    
 
 /* SWISSEPH
  * reads constants on ephemeris file
@@ -2738,160 +2744,75 @@ static int get_new_segment(double tjd, int ipli, int ifno, char *serr, struct sw
  */
 static void read_const(int ifno, char *serr, struct swe_data *swed)
 {
-  char *c, c2, *sp;
-  char s[AS_MAXCH*2], s2[AS_MAXCH], msg[AS_MAXCH];
+  char s[AS_MAXCH*2];
   char sastnam[41];
-  int i, ipli, kpl;
-  int retc;
-  int fendian, freord;
   int lastnam = 19;
-  FILE *fp;
+  int ipli, kpl;
   int lng;
   uint32 ulng;
   int flen, fpos;
   short nplan;
-  int testendian;
   double doubles[20];
   struct plan_data *pdp;
   struct file_data *fdp = &swed->fidat[ifno];
   int nbytes_ipl = 2;
-  fp = fdp->fptr;
-  /*************************************
-   * version number of file            *
-   *************************************/
-  sp = fgets(s, AS_MAXCH, fp);
-  if (sp == NULL || strstr(sp, "\r\n") == NULL)
-    throw_file_damaged(fdp,serr,swed);
-  sp = strchr(s, '\r');
-  *sp = '\0';
-  sp = s;
-  while (isdigit((int) *sp) == 0 && *sp != '\0')
-    sp++;
-  if (*sp == '\0') throw_file_damaged( fdp, serr, swed);
-
-  /* version unused so far */
-  fdp->fversion = atoi(sp);
+  FILE *fp = fdp->fptr;
+  
+  struct file_context fc = set_file_context(ifno,serr,swed);
+    
+// version number (unused so far) */
+  read_line(s,fdp,serr,swed);
+  fdp->fversion = int_from_string(s,fdp,serr,swed);
+  
   /*************************************
    * correct file name?                *
    *************************************/
-  sp = fgets(s, AS_MAXCH, fp);
-  if (sp == NULL || strstr(sp, "\r\n") == NULL) 
-    throw_file_damaged( fdp, serr, swed);
-  /* file name, without path */
-  sp = strrchr(fdp->fnam, (int) *DIR_GLUE);
-  if (sp == NULL)
-    sp = fdp->fnam;
-  else
-    sp++;
-  strcpy(s2, sp);
-  /* to lower case */
-  for (sp = s2; *sp != '\0'; sp++)
-    *sp = tolower((int) *sp);
-  /* prepare string of should-be file name */
-  sp = s + strlen(s) - 1;
-  while (*sp == '\n' || *sp == '\r' || *sp == ' ') {
-    *sp = '\0';
-    sp--;
-  }
-  for (sp = s; *sp != '\0'; sp++)
-    *sp = tolower((int) *sp);
-  if (strcmp(s2, s) != 0) {
-    sprintf(msg, "Ephemeris file name '%s' wrong; rename '%s' ", s2, s);
-    throw_file_error(fdp,msg,serr,swed);
-  }
-  /*************************************
+  read_line(s,fdp,serr,swed);  
+  check_filename(s,fdp,serr,swed);
+  
+   /*************************************
    * copyright                         *
    *************************************/
-  sp = fgets(s, AS_MAXCH, fp);
-  if (sp == NULL || strstr(sp, "\r\n") == NULL)
-    throw_file_damaged( fdp, serr, swed);
+  read_line(s,fdp,serr,swed);  
+
   /****************************************
    * orbital elements, if single asteroid *
    ****************************************/
   if (ifno == SEI_FILE_ANY_AST) {
-    sp = fgets(s, AS_MAXCH * 2, fp);
-    if (sp == NULL || strstr(sp, "\r\n") == NULL)
-      throw_file_damaged( fdp, serr, swed);
-    /* MPC number and name; will be analyzed below:
-     * search "asteroid name" */
-    while(*sp == ' ') sp++;
-    while(isdigit(*sp)) sp++;
-    sp++;
-    i = sp - s;
-    strncpy(sastnam, sp, lastnam+i);
-    *(sastnam+lastnam+i) = '\0';
-    /* save elements, they are required for swe_plan_pheno() */
-    strcpy(swed->astelem, s);
-    /* required for magnitude */
-    swed->ast_H = atof(s + 35 + i);
-    swed->ast_G = atof(s + 42 + i);
-    if (swed->ast_G == 0) swed->ast_G = 0.15;
-    /* diameter in kilometers, not always given: */
-    strncpy(s2, s+51+i, 7);
-    *(s2 + 7) = '\0';
-    swed->ast_diam = atof(s2);
-    if (swed->ast_diam == 0) {
-      /* estimate the diameter from magnitude; assume albedo = 0.15 */
-      swed->ast_diam = 1329/sqrt(0.15) * pow(10, -0.2 * swed->ast_H);
+    read_line(s,fdp,serr,swed);
+    orbital_elements_single_asteroid(s,sastnam,lastnam,fdp,serr,swed);
     }
-  }
+  
   /*************************************
    * one int for test of byte order   *
    *************************************/
-  if (fread((void *) &testendian, 4, 1, fp) != 1)
-    throw_file_damaged( fdp, serr, swed);
-  /* is byte order correct?            */
-  if (testendian == SEI_FILE_TEST_ENDIAN)
-    freord = SEI_FILE_NOREORD;
-  else {
-    freord = SEI_FILE_REORD;
-    sp = (char *) &lng;
-    c = (char *) &testendian;
-    for (i = 0; i < 4; i++)
-      *(sp+i) = *(c+3-i);
-    if (lng != SEI_FILE_TEST_ENDIAN)
-      throw_file_damaged( fdp, serr, swed);
-      /* printf("%d  %x\n", lng, lng);*/
-  }
-  /* is file bigendian or littlendian?
-   * test first byte of test integer, which is highest if bigendian */
-  c = (char *) &testendian;
-  c2 = SEI_FILE_TEST_ENDIAN / 16777216L;
-  if (*c == c2)
-    fendian = SEI_FILE_BIGENDIAN;
-  else
-    fendian = SEI_FILE_LITENDIAN;
-  fdp->iflg = (int) freord | fendian;
+  determine_byte_order( &fc ); 
+
   /*************************************
    * length of file correct?           *
    *************************************/
-  retc = do_fread((void *) &lng, 4, 1, 4, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+  do_fread((void *) &lng, 4, 1, 4, &fc); // fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
   fpos = ftell(fp);
-  if (fseek(fp, 0L, SEEK_END) != 0)
-    throw_file_damaged( fdp, serr, swed);
+  if (fseek(fp, 0L, SEEK_END) != 0) throw_file_damaged( fdp, serr, swed);
   flen = ftell(fp);
-  if (lng != flen)
-    throw_file_damaged( fdp, serr, swed);
+  if (lng != flen) throw_file_damaged( fdp, serr, swed);
+  fseek(fp,fpos,SEEK_SET); // Restore current position
+  
   /**********************************************************
    * DE number of JPL ephemeris which this file is based on *
    **********************************************************/
-  retc = do_fread((void *) &fdp->sweph_denum, 4, 1, 4, fp, fpos, freord, fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+  do_fread((void *) &fdp->sweph_denum, 4, 1, 4, &fc); 
   swed->jpldenum = fdp->sweph_denum;
   /*************************************
    * start and end epoch of file       *
    *************************************/
-  retc = do_fread((void *) &fdp->tfstart, 8, 1, 8, fp, SEI_CURR_FPOS,freord, fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
-  retc = do_fread((void *) &fdp->tfend, 8, 1, 8, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
-  
+  do_fread((void *) &fdp->tfstart, 8, 1, 8, &fc); 
+  do_fread((void *) &fdp->tfend, 8, 1, 8, &fc);
+    
   /*************************************
    * how many planets are in file?     *
    *************************************/
-  retc = do_fread((void *) &nplan, 2, 1, 2, fp, SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+  do_fread((void *) &nplan, 2, 1, 2, &fc);
   if (nplan > 256) {
     nbytes_ipl = 4;
     nplan %= 256;
@@ -2900,54 +2821,21 @@ static void read_const(int ifno, char *serr, struct swe_data *swed)
     throw_file_damaged( fdp, serr, swed);
   fdp->npl = nplan;
   /* which ones?                       */
-  retc = do_fread((void *) fdp->ipl, nbytes_ipl, (int) nplan, sizeof(int), fp, SEI_CURR_FPOS,
-freord, fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+  do_fread((void *) fdp->ipl, nbytes_ipl, (int) nplan, sizeof(int), &fc);
 
   /*************************************
    * asteroid name                     *
    *************************************/
   if (ifno == SEI_FILE_ANY_AST) {
-    char sastno[12];
-    int j;
-    /* name of asteroid is taken from orbital elements record
-     * read above */
-    j = 4;  /* old astorb.dat had only 4 characters for MPC# */
-    while (sastnam[j] != ' ' && j < 10)  /* new astorb.dat has 5 */
-      j++;
-    strncpy(sastno, sastnam, j);
-    sastno[j] = '\0';
-    i = (int) atol(sastno);
-    if (i == fdp->ipl[0] - SE_AST_OFFSET) {
-      /* element record is from bowell database */
-      strncpy(fdp->astnam, sastnam+j+1, lastnam);
-      /* overread old ast. name field */
-      if (fread((void *) s, 30, 1, fp) != 1)
-        throw_file_damaged( fdp, serr, swed);
-    } else {
-      /* older elements record structure: the name
-       * is taken from old name field */
-      if (fread((void *) fdp->astnam, 30, 1, fp) != 1)
-        throw_file_damaged( fdp, serr, swed);
+    read_astnam(fdp->astnam, sastnam, lastnam, &fc);
     }
-    /* in worst case strlen of not null terminated area! */
-    i = strlen(fdp->astnam) - 1;
-    if (i < 0)
-      i = 0;
-    sp = fdp->astnam + i;
-    while(*sp == ' ') {
-      sp--;
-    }
-    sp[1] = '\0';
-  }
+    
   /*************************************
    * check CRC                         *
    *************************************/
   fpos = ftell(fp);
   /* read CRC from file */
-  retc = do_fread((void *) &ulng, 4, 1, 4, fp, SEI_CURR_FPOS, freord,
-fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+  do_fread((void *) &ulng, 4, 1, 4, &fc);
 
   /* read check area from file */
   fseek(fp, 0L, SEEK_SET);
@@ -2965,52 +2853,39 @@ fendian, ifno, serr, swed);
    *************************************/
   /* clight, aunit, helgravconst, ratme, sunradius
    * these constants are currently not in use */
-  retc = do_fread((void *) &doubles[0], 8, 5, 8, fp, SEI_CURR_FPOS, freord,
-fendian, ifno, serr, swed);
-  if (retc != OK) throw_file_read_error(fdp,serr,swed);
+  do_fread((void *) doubles, 8, 5, 8, &fc);
 
   swed->gcdat.clight       = doubles[0];
   swed->gcdat.aunit        = doubles[1];
   swed->gcdat.helgravconst = doubles[2];
   swed->gcdat.ratme        = doubles[3];
   swed->gcdat.sunradius    = doubles[4];
+
   /*************************************
    * read constants of planets         *
    *************************************/
   for (kpl = 0; kpl < fdp->npl; kpl++) {
     /* get SEI_ planet number */
     ipli = fdp->ipl[kpl];
-    if (ipli >= SE_AST_OFFSET)
-      pdp = &swed->pldat[SEI_ANYBODY];
-    else
-      pdp = &swed->pldat[ipli];
+    pdp = &swed->pldat[ipli >= SE_AST_OFFSET ? SEI_ANYBODY:ipli];
     pdp->ibdy = ipli;
     /* file position of planet's index */
-    retc = do_fread((void *) &pdp->lndx0, 4, 1, 4, fp, SEI_CURR_FPOS,
-freord, fendian, ifno, serr, swed);
-    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+    do_fread((void *) &pdp->lndx0, 4, 1, 4, &fc);
 
     /* flags: helio/geocentric, rotation, reference ellipse */
-    retc = do_fread((void *) &pdp->iflg, 1, 1, sizeof(int), fp,
-SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+    do_fread((void *) &pdp->iflg, 1, 1, sizeof(int), &fc);
 
     /* number of chebyshew coefficients / segment  */
     /* = interpolation order +1                    */
-    retc = do_fread((void *) &pdp->ncoe, 1, 1, sizeof(int), fp,
-SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+    do_fread((void *) &pdp->ncoe, 1, 1, sizeof(int), &fc);
 
     /* rmax = normalisation factor */
-    retc = do_fread((void *) &lng, 4, 1, 4, fp, SEI_CURR_FPOS, freord,
-fendian, ifno, serr, swed);
-    if (retc != OK)  throw_file_read_error(fdp,serr,swed);
+    do_fread((void *) &lng, 4, 1, 4, &fc);
     pdp->rmax = lng / 1000.0;
+
     /* start and end epoch of planetary ephemeris,   */
     /* segment length, and orbital elements          */
-    retc = do_fread((void *) doubles, 8, 10, 8, fp, SEI_CURR_FPOS, freord,
-fendian, ifno, serr, swed);
-    if (retc != OK) throw_file_read_error(fdp,serr,swed);
+    do_fread((void *) doubles, 8, 10, 8, &fc);
 
     pdp->tfstart  = doubles[0];
     pdp->tfend    = doubles[1];
@@ -3034,29 +2909,159 @@ fendian, ifno, serr, swed);
         }
       }
       pdp->refep = (double *) malloc((size_t) pdp->ncoe * 2 * 8);
-      retc = do_fread((void *) pdp->refep, 8, 2*pdp->ncoe, 8, fp,
-SEI_CURR_FPOS, freord, fendian, ifno, serr, swed);
-      if (retc != OK) throw_file_read_error(fdp,serr,swed);
-
-    }/**/
+      do_fread((void *) pdp->refep, 8, 2*pdp->ncoe, 8, &fc);
+      
+    }  
   }
-
 }
 
+static void read_astnam( char* astnam, char* sastnam, int lastnam, struct file_context *fc) {
+    char sastno[12];
+    char s[AS_MAXCH*2];
+    /* name of asteroid is taken from orbital elements record
+     * read above */
+    int j = 4;  /* old astorb.dat had only 4 characters for MPC# */
+    while (sastnam[j] != ' ' && j < 10)  /* new astorb.dat has 5 */
+      j++;
+    strncpy(sastno, sastnam, j);
+    sastno[j] = '\0';
+    int i = (int) atol(sastno);
+    if (i == fc->fdp->ipl[0] - SE_AST_OFFSET) {
+      /* element record is from bowell database */
+      strncpy(astnam, sastnam+j+1, lastnam);
+      /* overread old ast. name field */
+      if (fread((void *) s, 30, 1, fc->fp) != 1)
+        throw_file_damaged( fc->fdp, fc->serr, fc->swed);
+    } else {
+      /* older elements record structure: the name
+       * is taken from old name field */
+      if (fread((void *) astnam, 30, 1, fc->fp) != 1)
+        throw_file_damaged( fc->fdp, fc->serr, fc->swed);
+    }
+    /* in worst case strlen of not null terminated area! */
+    i = strlen(astnam) - 1;
+    if (i < 0) i = 0;
+    char *sp = astnam + i;
+    while(*sp == ' ') {
+      sp--;
+    }
+    sp[1] = '\0';
+  }
+
+static void read_line(char* s, struct file_data* fdp, char* serr, struct swe_data* swed) {
+  char *sp;
+  sp = fgets(s, AS_MAXCH*2, fdp->fptr);
+  if (sp == NULL || strstr(sp, "\r\n") == NULL)
+    throw_file_damaged(fdp,serr,swed);
+  for(sp = strchr(s, '\r');sp>s && isspace(*sp); --sp);  // trim trailing whitespace
+  *(sp+1) = '\0';    
+  }
+
+ static void orbital_elements_single_asteroid(char* s,char *sastnam,int lastnam,struct file_data* fdp, char* serr, struct swe_data* swed) {
+   char *sp;
+   char s2[AS_MAXCH];
+   /* MPC number and name; will be analyzed below:
+     * search "asteroid name" */
+    while(*sp == ' ') sp++;
+    while(isdigit(*sp)) sp++;
+    sp++;
+    int i = sp - s;
+    strncpy(sastnam, sp, lastnam+i);
+    *(sastnam+lastnam+i) = '\0';
+    /* save elements, they are required for swe_plan_pheno() */
+    strcpy(swed->astelem, s);
+    /* required for magnitude */
+    swed->ast_H = atof(s + 35 + i);
+    swed->ast_G = atof(s + 42 + i);
+    if (swed->ast_G == 0) swed->ast_G = 0.15;
+    /* diameter in kilometers, not always given: */
+    strncpy(s2, s+51+i, 7);
+    *(s2 + 7) = '\0';
+    swed->ast_diam = atof(s2);
+    if (swed->ast_diam == 0) {
+      /* estimate the diameter from magnitude; assume albedo = 0.15 */
+      swed->ast_diam = 1329/sqrt(0.15) * pow(10, -0.2 * swed->ast_H);
+    }
+  }  
+
+static void determine_byte_order( struct file_context* fc) {  
+  
+  int testendian;
+  int lng;
+  char *c, c2, *sp;
+
+  if (fread((void *) &testendian, 4, 1, fc->fp) != 1)
+    throw_file_damaged( fc->fdp, fc->serr, fc->swed);
+  /* is byte order correct?            */
+  if (testendian == SEI_FILE_TEST_ENDIAN)
+    fc->freord = SEI_FILE_NOREORD;
+  else {
+    fc->freord = SEI_FILE_REORD;
+    sp = (char *) &lng;
+    c = (char *) &testendian;
+    for (int i = 0; i < 4; i++)
+      *(sp+i) = *(c+3-i);
+    if (lng != SEI_FILE_TEST_ENDIAN)
+      throw_file_damaged( fc->fdp, fc->serr, fc->swed);
+      /* printf("%d  %x\n", lng, lng);*/
+  }
+  /* is file bigendian or littlendian?
+   * test first byte of test integer, which is highest if bigendian */
+  c = (char *) &testendian;
+  c2 = SEI_FILE_TEST_ENDIAN / 16777216L;
+  if (*c == c2)
+    fc->fendian = SEI_FILE_BIGENDIAN;
+  else
+    fc->fendian = SEI_FILE_LITENDIAN;
+  fc->fdp->iflg = (int) fc->freord | fc->fendian;
+  }
+  
+  static int int_from_string(char* s, struct file_data* fdp, char* serr, struct swe_data* swed) {
+  char *sp = s;
+  while (isdigit((int) *sp) == 0 && *sp != '\0') sp++;
+  if (*sp == '\0') throw_file_damaged( fdp, serr, swed);
+  return atoi(sp);
+  }  
+  
+static void check_filename(char* name_exp, struct file_data* fdp, char* serr, struct swe_data* swed) {
+  char name_act[AS_MAXCH], msg[AS_MAXCH];
+  filename_without_path( name_act, fdp->fnam);
+  if (!equals_ignore_case(name_exp,name_act)) {
+    sprintf(msg, "Ephemeris file name '%s' wrong; rename '%s' ", name_act, name_exp);
+    throw_file_error(fdp->fptr,msg,serr,swed);
+    }  
+  }
+
+static bool equals_ignore_case(char* s1, char*s2) {
+  int n = strlen(s1);
+  if (n != strlen(s2)) 
+    return false;
+  else 
+    for (int i=n-1;i>=0;--i) {
+      if (tolower(s1[i])!=tolower(s2[i])) return false;
+      }  
+  return true;
+  }
+  
+static void filename_without_path( char* name, char* fullname) {
+  char *sp = strrchr(fullname, (int) *DIR_GLUE);
+  if (sp == NULL)
+    sp = fullname;
+  else
+    sp++;
+  strcpy(name, sp);  
+  }  
+  
 static void throw_file_damaged(struct file_data *fdp, char* serr, struct swe_data *swed) {
   char *serr_file_damage = "Ephemeris file %s is damaged.";
   char msg[AS_MAXCH];
   int errmsglen = strlen(serr_file_damage) + strlen(fdp->fnam);
   sprintf(msg, serr_file_damage, (errmsglen < AS_MAXCH) ? fdp->fnam : "" );
-  throw_file_error(fdp,msg,serr,swed);
+  throw_file_error(fdp->fptr,msg,serr,swed);
   }
 
-static void throw_file_read_error(struct file_data *fdp, char* serr, struct swe_data *swed) {
-  throw_file_error(fdp,"File Error while reading data",serr,swed);
-  }
-
-static void throw_file_error(struct file_data *fdp, char* msg, char* serr, struct swe_data *swed) {
-  fclose(fdp->fptr);
+static void throw_file_error(FILE *fp, char* msg, char* serr, struct swe_data *swed) {
+  fclose(fp);
   throw(ERR,msg,serr,swed);
   }
 
@@ -3074,57 +3079,36 @@ static void throw_file_error(struct file_data *fdp, char* msg, char* serr, struc
  * ifno    file number
  * serr    error string
  */
-static int do_fread(void *trg, int size, int count, int corrsize, FILE *fp, int fpos, int freord, int fendian, int ifno, char *serr, struct swe_data *swed)
-{
-  int i, j, k;
-  int totsize;
+static void do_fread(void *trg, int size, int count, int corrsize, struct file_context *fc) {
   unsigned char space[1000];
   unsigned char *targ = (unsigned char *) trg;
-  totsize = size * count;
-  if (fpos >= 0)
-    fseek(fp, fpos, SEEK_SET);
+
+  int totsize = size * count;
+  if (fc->fpos >= 0)
+    fseek(fc->fp, fc->fpos, SEEK_SET);
   /* if no byte reorder has to be done, and read size == return size */
-  if (!freord && size == corrsize) {
-    if (fread((void *) targ, (size_t) totsize, 1, fp) == 0) {
-      if (serr != NULL) {
-  strcpy(serr, "Ephemeris file is damaged. ");
-  if (strlen(serr) + strlen(swed->fidat[ifno].fnam) < AS_MAXCH - 1)
-    sprintf(serr, "Ephemeris file %s is damaged.", swed->fidat[ifno].fnam);
-      }
-      fclose(fp);
-      fp = NULL;
-      return(ERR);
-    } else
-      return(OK);
-  } else {
-    if (fread((void *) &space[0], (size_t) totsize, 1, fp) == 0) {
-      if (serr != NULL) {
-  strcpy(serr, "Ephemeris file is damaged. ");
-  if (strlen(serr) + strlen(swed->fidat[ifno].fnam) < AS_MAXCH - 1)
-    sprintf(serr, "Ephemeris file %s is damaged.", swed->fidat[ifno].fnam);
-      }
-      fclose(fp);
-      fp = NULL;
-      return(ERR);
-    }
+  if (!fc->freord && size == corrsize) {
+    if (fread((void *) targ, (size_t) totsize, 1, fc->fp) == 0) {
+      throw_file_damaged(fc->fdp,fc->serr,fc->swed);
+      } 
+    } 
+  else {
+    if (fread((void *) &space[0], (size_t) totsize, 1, fc->fp) == 0)
+      throw_file_damaged(fc->fdp,fc->serr,fc->swed);
     if (size != corrsize) {
       memset((void *) targ, 0, (size_t) count * corrsize);
-    }
-    for(i = 0; i < count; i++) {
-      for (j = size-1; j >= 0; j--) {
-  if (freord)
-    k = size-j-1;
-        else
-    k = j;
+      }
+    for(int i = 0; i < count; i++) {
+      for (int j = size-1; j >= 0; j--) {
+        int k = (fc->freord) ? size-j-1 : j;
         if (size != corrsize)
-          if ((fendian == SEI_FILE_BIGENDIAN && !freord) ||
-              (fendian == SEI_FILE_LITENDIAN &&  freord))
-      k += corrsize - size;
+          if ((fc->fendian == SEI_FILE_BIGENDIAN && !fc->freord) ||
+              (fc->fendian == SEI_FILE_LITENDIAN &&  fc->freord))
+            k += corrsize - size;
         targ[i*corrsize+k] = space[i*size+j];
       }
     }
   }
-  return(OK);
 }
 
 /* SWISSEPH

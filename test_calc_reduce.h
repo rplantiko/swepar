@@ -228,11 +228,29 @@ static const struct meff_ele FAR eff_arr[] = {
   {0.000, 0.000000}
 };
 
+struct file_context {
+  int fpos;
+  int freord;
+  int fendian;
+  int ifno;
+  char *serr;
+  FILE* fp;
+  struct file_data *fdp;  
+  struct swe_data *swed;
+  };
 
-static int do_fread(void *targ, int size, int count, int corrsize, 
-		    FILE *fp, int fpos, int freord, int fendian, int ifno, 
-		    char *serr, struct swe_data *swed);
-static int get_new_segment(double tjd, int ipli, int ifno, char *serr, struct swe_data *swed);
+static struct file_context set_file_context( int ifno, char* serr, struct swe_data *swed);    
+static void do_fread(void *targ, int size, int count, int corrsize, struct file_context *fc); 
+static void read_line(char* s, struct file_data* fp, char* serr, struct swe_data *swed);  
+static int int_from_string(char* s, struct file_data* fdp, char* serr, struct swe_data* swed);
+static void determine_byte_order( struct file_context* fc);
+static void filename_without_path( char* name, char* fullname);
+static bool equals_ignore_case(char* s1, char*s2);
+static void check_filename(char* name_exp, struct file_data* fdp, char* serr, struct swe_data* swed);
+static void orbital_elements_single_asteroid(char* s,char *astnam,int lastnam,struct file_data* fdp, char* serr, struct swe_data* swed);
+static void read_astnam( char* astnam, char* sastnam, int lastnam, struct file_context *fc);
+
+static void get_new_segment(double tjd, int ipli, int ifno, char *serr, struct swe_data *swed);
 static int main_planet(double tjd, int ipli, int epheflag, int iflag,
 		       char *serr, struct swe_data* swed);
 static int main_planet_bary(double tjd, int ipli, int epheflag, int iflag, 
@@ -269,8 +287,8 @@ static int app_pos_rest(struct plan_data *pdp, int iflag,
     double *xx, double *x2000, struct epsilon *oe, char *serr, struct swe_data *swed);
 
 static void throw_file_damaged(struct file_data *fdp, char* serr, struct swe_data *swed);
-static void throw_file_read_error(struct file_data *fdp, char* serr, struct swe_data *swed);
-static void throw_file_error(struct file_data *fdp, char* msg, char* serr, struct swe_data *swed);
+static void throw_file_error(FILE *fp, char* msg, char* serr, struct swe_data *swed);
+static void throw_coeff_error(int nco,struct plan_data *pdp,struct file_context *fc);
 
 // Functions that are declared elswhere and have to be decorated with a pointer to swed
 FILE *swid_fopen(int ifno, char *fname, char *ephepath, char *serr, struct swe_data *swed);
