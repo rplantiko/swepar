@@ -120,7 +120,7 @@ int se_calc( double tjd, int ipl, int iflag, double *xx, char *serr, struct swe_
       ipl_act   = ipl,
       retc;
       
-  if ((retc = setjmp(swed->env))==0) {    
+  if ((retc = setjmp((swed->state).env))==0) {    
 
     se_calc_prepare( tjd, &ipl_act, &iflag_act, xx, serr, swed);
     if (iflag_act==ERR) return ERR;
@@ -566,7 +566,7 @@ calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr, struct swe_data *s
 
   sprintf(serr, "illegal planet number %d.",ipl);
   throw(ERR,serr,serr,swed);
-  return NULL; // will not be reached
+  return 0; // will not be reached
   }
 
 
@@ -1165,6 +1165,17 @@ again:
 
   }
 
+// Same as sweph, but returns a code (OK or ERR or NOT_AVAILABLE) instead of throwing an exception  
+static int sweph_nothrow(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BOOL do_save, double *xpret, char *serr, struct swe_data *swed) {
+  jmp_state state_save = swed->state;
+  int retc;
+  if ((retc = setjmp((swed->state).env)) == 0) {
+    sweph(tjd,ipli,ifno,iflag,xsunb,do_save,xpret,serr,swed);
+    }
+  swed->state = state_save;  
+  return retc;  
+  }
+  
 /*
  * Alois 2.12.98: inserted error message generation for file not found
  */
@@ -4626,121 +4637,113 @@ int FAR PASCAL_CONV swed_fixstar_mag(char *star, double *mag, char *serr, struct
   return retc;
 }
 
-const char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_data *swed)
-{
-  int i;
-  int retc;
-  double xp[6];
-  /* function calls for Pluto with asteroid number 134340
-   * are treated as calls for Pluto as main body SE_PLUTO */
-  if (ipl == SE_AST_OFFSET + 134340)
-    ipl = SE_PLUTO;
-  if (ipl != 0 && ipl == swed->i_saved_planet_name) {
-    strcpy(s, swed->saved_planet_name);
-    return s;
-  }
-  if (ipl <= SE_NPLANETS) {
-    strcpy(s,plnam[ipl]);
+const char *FAR PASCAL_CONV swed_get_planet_name(int ipl, char *s, struct swe_data *swed) {
+
+  if (ipl != swed->i_saved_planet_name) {
+    read_planet_name(ipl,s,swed);
     }
-  else {
-  switch(ipl) {
-    case SE_AST_OFFSET + MPC_CHIRON:
-      strcpy(s, plnam[SE_CHIRON]);
-      break;
-    case SE_AST_OFFSET + MPC_PHOLUS:
-      strcpy(s, plnam[SE_PHOLUS]);
-      break;
-    case SE_AST_OFFSET + MPC_CERES:
-      strcpy(s, plnam[SE_CERES]);
-      break;
-    case SE_AST_OFFSET + MPC_PALLAS:
-      strcpy(s, plnam[SE_PALLAS]);
-      break;
-    case SE_AST_OFFSET + MPC_JUNO:
-      strcpy(s, plnam[SE_JUNO]);
-      break;
-    case SE_AST_OFFSET + MPC_VESTA:
-      strcpy(s, plnam[SE_VESTA]);
-      break;
-    default:
-      /* fictitious planets */
-      if (ipl >= SE_FICT_OFFSET && ipl <= SE_FICT_MAX) {
-        swi_get_fict_name(ipl - SE_FICT_OFFSET, s);
-        break;
-      }
-      /* asteroids */
-      if (ipl > SE_AST_OFFSET) {
-  /* if name is already available */
-        if (ipl == swed->fidat[SEI_FILE_ANY_AST].ipl[0])
-          strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);
-          /* else try to get it from ephemeris file */
-        else {
-          retc = sweph(J2000, ipl, SEI_FILE_ANY_AST, 0, NULL, NO_SAVE, xp, NULL,swed);
-          if (retc != ERR && retc != NOT_AVAILABLE)
-            strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);
-          else
-            sprintf(s, "%d: not found", ipl - SE_AST_OFFSET);
-          }
-        /* If there is a provisional designation only in ephemeris file,
-         * we look for a name in seasnam.txt, which can be updated by
-         * the user.
-         * Some old ephemeris files return a '?' in the first position.
-         * There are still a couple of unnamed bodies that got their
-         * provisional designation before 1925, when the current method
-         * of provisional designations was introduced. They have an 'A'
-         * as the first character, e.g. A924 RC.
-         * The file seasnam.txt may contain comments starting with '#'.
-         * There must be at least two columns:
-         * 1. asteroid catalog number
-         * 2. asteroid name
-         * The asteroid number may or may not be in brackets
-         */
-        if (s[0] == '?' || isdigit((int) s[1])) {
-          int ipli = (int) (ipl - SE_AST_OFFSET), iplf = 0;
-          FILE *fp;
-          char si[AS_MAXCH], *sp, *sp2;
-          if ((fp = swid_fopen(-1, SE_ASTNAMFILE, swed->ephepath, NULL, swed)) != NULL) {
-            while(ipli != iplf && (sp = fgets(si, AS_MAXCH, fp)) != NULL) {
-              while (*sp == ' ' || *sp == '\t'
-                     || *sp == '(' || *sp == '[' || *sp == '{')
-                sp++;
-              if (*sp == '#' || *sp == '\r' || *sp == '\n' || *sp == '\0')
-                continue;
-              /* catalog number of body of current line */
-              iplf = atoi(sp);
-              if (ipli != iplf)
-                continue;
-              /* set pointer after catalog number */
-              sp = strpbrk(sp, " \t");
-              if (sp == NULL)
-                continue; /* there is no name */
-              while (*sp == ' ' || *sp == '\t')
-                sp++;
-              sp2 = strpbrk(sp, "#\r\n");
-              if (sp2 != NULL)
-                *sp2 = '\0';
-              if (*sp == '\0')
-                continue;
-              swi_right_trim(sp);
-              strcpy(s, sp);
-            }
-            fclose(fp);
-          }
-        }
-      } else  {
-  i = ipl;
-  sprintf(s, "%d", i);
-      }
-      break;
-    }
-  }
+
   if (strlen(s) < 80) {
     swed->i_saved_planet_name = ipl;
     strcpy(swed->saved_planet_name, s);
-  }
+    }
+  
   return s;
-}
 
+  }
+
+char *read_planet_name(int ipl, char* s, struct swe_data *swed) {  
+  
+  if (ipl <= SE_NPLANETS) {
+    return strcpy(s,plnam[ipl]);
+    }
+  
+  for (int i=0;i<bigmpc_length;i++) {
+    if (ipl==bigmpc[2*i]) return strcpy(s,plnam[bigmpc[2*i+1]]);
+    }  
+  
+  /* fictitious planets */
+  if (ipl >= SE_FICT_OFFSET && ipl <= SE_FICT_MAX) {    
+    swi_get_fict_name(ipl - SE_FICT_OFFSET, s);  
+    return s;  
+    }
+      
+  if (ipl > SE_AST_OFFSET) { /* asteroids */  
+    return read_asteroid_name( ipl, s, swed );        
+    }  
+
+  sprintf(s, "%d", ipl);  /* Fallback */
+  return s;
+  
+  }
+  
+char *read_asteroid_name(int ipl, char* s, struct swe_data *swed) {
+
+  if (ipl == swed->fidat[SEI_FILE_ANY_AST].ipl[0]) {
+    return strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);
+    }
+    
+  /* else try to get it from ephemeris file */      
+  double xp[6];
+  if (sweph_nothrow(J2000, ipl, SEI_FILE_ANY_AST, 0, NULL, NO_SAVE, xp, NULL,swed) == OK)
+    return strcpy(s, swed->fidat[SEI_FILE_ANY_AST].astnam);          
+
+  /* Finally: use custom file seastnam.txt */
+  return read_asteroid_name_from_file(ipl,s,swed);
+    
+  }
+  
+char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed) {
+
+  /* if name is contained in the currently open ephemeris file */      
+  /* If there is a provisional designation only in ephemeris file,      
+   * we look for a name in seasnam.txt, which can be updated by      
+   * the user.      
+   * Some old ephemeris files return a '?' in the first position.      
+   * There are still a couple of unnamed bodies that got their      
+   * provisional designation before 1925, when the current method      
+   * of provisional designations was introduced. They have an 'A'      
+   * as the first character, e.g. A924 RC.      
+   * The file seasnam.txt may contain comments starting with '#'.      
+   * There must be at least two columns:      
+   * 1. asteroid catalog number      
+   * 2. asteroid name      
+   * The asteroid number may or may not be in brackets      
+   */      
+  int ipli = (int) (ipl - SE_AST_OFFSET), iplf = 0;        
+  FILE *fp;        
+  char si[AS_MAXCH], *sp, *sp2;        
+  if ((fp = swid_fopen(-1, SE_ASTNAMFILE, swed->ephepath, NULL, swed)) != NULL) {        
+    while(ipli != iplf && (sp = fgets(si, AS_MAXCH, fp)) != NULL) {        
+      while (*sp == ' ' || *sp == '\t'        
+             || *sp == '(' || *sp == '[' || *sp == '{')        
+        sp++;        
+      if (*sp == '#' || *sp == '\r' || *sp == '\n' || *sp == '\0')        
+        continue;        
+      /* catalog number of body of current line */        
+      iplf = atoi(sp);        
+      if (ipli != iplf)        
+        continue;        
+      /* set pointer after catalog number */        
+      sp = strpbrk(sp, " \t");        
+      if (sp == NULL)        
+        continue; /* there is no name */        
+      while (*sp == ' ' || *sp == '\t')        
+        sp++;        
+      sp2 = strpbrk(sp, "#\r\n");        
+      if (sp2 != NULL)        
+        *sp2 = '\0';        
+      if (*sp == '\0')        
+        continue;        
+      swi_right_trim(sp);        
+      strcpy(s, sp);        
+      }        
+    fclose(fp);        
+    }
+  return s;  
+  }  
+  
+  
 /* set geographic position and altitude of observer */
 void FAR PASCAL_CONV swed_set_topo(double geolon, double geolat, double geoalt, struct swe_data *swed)
 {

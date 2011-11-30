@@ -118,6 +118,17 @@ static const int FAR pnoint2jpl[]   = PNOINT2JPL;
 
 static const int pnoext2int[] = {SEI_SUN, SEI_MOON, SEI_MERCURY, SEI_VENUS, SEI_MARS, SEI_JUPITER, SEI_SATURN, SEI_URANUS, SEI_NEPTUNE, SEI_PLUTO, 0, 0, 0, 0, SEI_EARTH, SEI_CHIRON, SEI_PHOLUS, SEI_CERES, SEI_PALLAS, SEI_JUNO, SEI_VESTA, };
 
+static const int bigmpc[] = { 
+  SE_AST_OFFSET + MPC_CERES,   SE_CERES,
+  SE_AST_OFFSET + MPC_PALLAS,  SE_PALLAS,
+  SE_AST_OFFSET + MPC_JUNO,    SE_JUNO,
+  SE_AST_OFFSET + MPC_VESTA,   SE_VESTA,
+  SE_AST_OFFSET + MPC_CHIRON,  SE_CHIRON, 
+  SE_AST_OFFSET + MPC_PHOLUS,  SE_PHOLUS,
+  SE_AST_OFFSET + 134340,      SE_PLUTO
+  };
+static const int bigmpc_length = 7;
+
 static const struct meff_ele FAR eff_arr[] = {
   /*
    * r , m_eff for photon passing the sun at min distance r (fraction of Rsun)
@@ -263,6 +274,7 @@ static int sweplan(double tjd, int ipli, int ifno, int iflag, AS_BOOL do_save,
 static int swemoon(double tjd, int iflag, AS_BOOL do_save, double *xp, char *serr, struct swe_data *swed);
 static int sweph(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BOOL do_save, 
 		double *xp, char *serr, struct swe_data *swed);
+static int sweph_nothrow(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BOOL do_save, double *xpret, char *serr, struct swe_data *swed);
 static void rot_back(int ipl, struct swe_data *swed);
 static void read_const(int ifno, char *serr, struct swe_data *swed);
 static void embofs(double *xemb, double *xmoon);
@@ -286,6 +298,12 @@ void FAR PASCAL_CONV swed_set_sid_mode(int sid_mode, double t0, double ayan_t0, 
 static int app_pos_rest(struct plan_data *pdp, int iflag, 
     double *xx, double *x2000, struct epsilon *oe, char *serr, struct swe_data *swed);
 
+// Parts of planet name determination    
+char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed);
+char *read_asteroid_name(int ipl, char* s, struct swe_data *swed);
+char *read_planet_name(int ipl, char*s, struct swe_data *swed);
+    
+    
 static void throw_file_damaged(struct file_data *fdp, char* serr, struct swe_data *swed);
 static void throw_file_error(FILE *fp, char* msg, char* serr, struct swe_data *swed);
 static void throw_coeff_error(int nco,struct plan_data *pdp,struct file_context *fc);
@@ -429,7 +447,7 @@ static inline bool is_main_asteroid( int ipli ) {
 
 static inline void throw(int retc, char* msg, char *serr, struct swe_data* swed) {
   if (serr != msg) msg_append( serr, msg );
-  longjmp( swed->env, retc);  
+  longjmp( swed->state.env, retc);  
   }  
 
 const char* plnam[SE_NPLANETS] = {
