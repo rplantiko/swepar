@@ -298,17 +298,17 @@ void FAR PASCAL_CONV swed_set_sid_mode(int sid_mode, double t0, double ayan_t0, 
 static int app_pos_rest(struct plan_data *pdp, int iflag, 
     double *xx, double *x2000, struct epsilon *oe, char *serr, struct swe_data *swed);
 
-const int MAX_GET_LINE_LENGTH = 255,
-          MAX_ASNAM_LENGTH = 80;
-
-char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed);
-char *get_seastnam_pattern(char first);
-
+// Parts of ephemeris calculation (Moshier as well as sweph)
+static int moshier_planet(double tjd, int ipli, int iflag, char* serr, struct swe_data *swed);
+static int sweph_planet(double tjd, int ipli, int iflag, char* serr, struct swe_data *swed);
 
 // Parts of planet name determination    
-char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed);
-char *read_asteroid_name(int ipl, char* s, struct swe_data *swed);
+const int MAX_GET_LINE_LENGTH = 255,
+          MAX_ASNAM_LENGTH = 80;
 char *read_planet_name(int ipl, char*s, struct swe_data *swed);
+char *read_asteroid_name(int ipl, char* s, struct swe_data *swed);
+char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed);
+char *get_seastnam_pattern(char first);
     
     
 static void throw_file_damaged(struct file_data *fdp, char* serr, struct swe_data *swed);
@@ -466,7 +466,7 @@ static inline char* get_line( FILE* af, char* buf) {
     trim_space(buf) : 0;
   }
   
-static inline bool is_main_asteroid( int ipli ) {
+static inline bool is_main_object( int ipli ) {
   return ipli < SE_AST_OFFSET;
   }
 

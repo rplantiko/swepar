@@ -427,7 +427,7 @@ int swecalc_asteroid(double tjd, int ipl, int iflag, double **x, char *serr, str
     int retc;
 
     int ipli = get_ipli( ipl );
-    int ifno = is_main_asteroid(ipli) ? SEI_FILE_MAIN_AST : SEI_FILE_ANY_AST;
+    int ifno = is_main_object(ipli) ? SEI_FILE_MAIN_AST : SEI_FILE_ANY_AST;
 
     char serr_sun[AS_MAXCH];
     *serr_sun = '\0';
@@ -440,7 +440,7 @@ int swecalc_asteroid(double tjd, int ipl, int iflag, double **x, char *serr, str
 
 
     struct plan_data *psdp = &swed->pldat[SEI_SUNBARY];
-    struct plan_data* pdp  = &swed->pldat[ is_main_asteroid(ipli) ? ipli: SEI_ANYBODY ];
+    struct plan_data* pdp  = &swed->pldat[ is_main_object(ipli) ? ipli: SEI_ANYBODY ];
     *x = pdp->xreturn;
 
     retc = sweph(tjd, ipli, ifno, iflag, psdp->x, DO_SAVE, NULL, serr, swed);
@@ -673,46 +673,47 @@ static void calc_epsilon(double tjd, struct epsilon *e)
  * will be kept in
  * &swed->pldat[ipli].x[];
  */
-static int main_planet(double tjd, int ipli, int epheflag, int iflag, char *serr, struct swe_data *swed)
-{
-  int retc;
-  switch(epheflag) {
-    case SEFLG_SWIEPH:
-      /* compute barycentric planet (+ earth, sun, moon) */
-      retc = sweplan(tjd, ipli, SEI_FILE_PLANET, iflag, DO_SAVE, NULL, NULL, NULL, NULL, serr, swed);
-      if (retc == ERR) return ERR;
-      /* if sweph file not found, switch to moshier */
-      if (retc == NOT_AVAILABLE) {
-        if (switch_to_moshier(tjd,ipli,&iflag,serr)) goto moshier_planet;
-        else return ERR; 
-        }
-      
-      /* geocentric, lighttime etc. */
-      retc = (ipli == SEI_SUN) 
-               ? app_pos_etc_sun(iflag, serr, swed) 
-               : app_pos_etc_plan(ipli, iflag, serr, swed); 
-      if (retc == ERR) return ERR;
-      
-      /* if sweph file for t(lighttime) not found, switch to moshier */
-      if (retc == NOT_AVAILABLE) {
-        if (switch_to_moshier(tjd,ipli,&iflag,serr)) goto moshier_planet;
-        else return ERR; 
-        }
-      break;
-    case SEFLG_MOSEPH:
-      moshier_planet:
-      retc = swi_moshplan(tjd, ipli, DO_SAVE, NULL, NULL, serr);/**/
-      if (retc == ERR) return ERR;
-      /* geocentric, lighttime etc. */
-      retc = (ipli == SEI_SUN) ? 
-        app_pos_etc_sun(iflag, serr, swed) : app_pos_etc_plan(ipli, iflag, serr, swed);
-      if (retc == ERR) return ERR;
-      break;
-    default:
-      break;
+static int main_planet(double tjd, int ipli, int epheflag, int iflag, char *serr, struct swe_data *swed) {
+
+  if (epheflag == SEFLG_SWIEPH) {
+    /* compute barycentric planet (+ earth, sun, moon) */
+    int retc = sweph_planet(tjd,ipli,iflag,serr,swed);
+    if (retc == NOT_AVAILABLE) { 
+      /* Is at least Moshier available? No - return Error */
+      if (!switch_to_moshier(tjd,ipli,&iflag,serr)) return ERR;
+      }
+    else 
+      return retc;  
+    }
+
+  return moshier_planet(tjd,ipli,iflag,serr,swed);
+
   }
+
+static int sweph_planet(double tjd, int ipli, int iflag, char* serr, struct swe_data *swed) {
+
+  /* compute barycentric planet (+ earth, sun, moon) */
+  int retc = sweplan(tjd, ipli, SEI_FILE_PLANET, iflag, DO_SAVE, 0, 0, 0, 0, serr, swed);
+  if (retc < 0) return retc;
+  
+  /* geocentric, lighttime etc. */
+  retc = (ipli == SEI_SUN) 
+            ? app_pos_etc_sun(iflag, serr, swed) 
+            : app_pos_etc_plan(ipli, iflag, serr, swed); 
+  if (retc < 0) return retc;
+
   return iflag;
-}
+        
+  }
+
+static int moshier_planet(double tjd, int ipli, int iflag, char* serr, struct swe_data *swed) {
+  int retc = swi_moshplan(tjd, ipli, DO_SAVE, NULL, NULL, serr);/**/
+  if (retc == ERR) return ERR;
+  /* geocentric, lighttime etc. */
+  retc = (ipli == SEI_SUN) ? 
+    app_pos_etc_sun(iflag, serr, swed) : app_pos_etc_plan(ipli, iflag, serr, swed);
+  return (retc == ERR) ? ERR : iflag;
+  }
 
 /* Computes a main planet from any ephemeris or returns
  * it again, if it has been computed before.
@@ -988,9 +989,7 @@ static int sweph(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BO
   struct file_data *fdp = &swed->fidat[ifno];
   int speedf1, speedf2;
   AS_BOOL need_speed;
-  ipl = ipli;
-  if (ipli > SE_AST_OFFSET)
-    ipl = SEI_ANYBODY;
+  ipl = is_main_object( ipli ) ? ipli : SEI_ANYBODY;
   pdp = &swed->pldat[ipl];
   if (do_save)
     xp = pdp->x;
@@ -1017,14 +1016,13 @@ static int sweph(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BO
       || (ipl == SEI_ANYBODY && ipli != pdp->ibdy)) {
       fclose(fdp->fptr);
       fdp->fptr = NULL;
-      if (pdp->refep != NULL)
-  free((void *) pdp->refep);
+      if (pdp->refep != NULL) free((void *) pdp->refep);
       pdp->refep = NULL;
-      if (pdp->segp != NULL)
-  free((void *) pdp->segp);
+      if (pdp->segp != NULL) free((void *) pdp->segp);
       pdp->segp = NULL;
     }
   }
+  
   /* if sweph file not open, find and open it */
   if (fdp->fptr == NULL) {
     swi_gen_filename(tjd, ipli, fname);
@@ -1033,9 +1031,10 @@ static int sweph(double tjd, int ipli, int ifno, int iflag, double *xsunb, AS_BO
     if (sp != NULL) {
       *sp = '\0';
       subdirlen = strlen(subdirnam);
-    } else {
+      } 
+    else {
       subdirlen = 0;
-    }
+      }
     strcpy(s, fname);
 again:
     fdp->fptr = swid_fopen(ifno, s, swed->ephepath, serr, swed);
@@ -1044,7 +1043,7 @@ again:
        * if it is a numbered asteroid file, try also for short files (..s.se1)
        * On the second try, the inserted 's' will be seen and not tried again.
        */
-      if (ipli > SE_AST_OFFSET) {
+      if (!is_main_object(ipli)) {
   char *spp;
   spp = strchr(s, '.');
   if (spp > s && *(spp-1) != 's') {  /* no 's' before '.' ? */
@@ -1135,8 +1134,7 @@ again:
     tsv = pedp->teval;
     pedp->teval = 0;
     retc = sweph(tjd, SEI_EMB, ifno, iflag | SEFLG_SPEED, NULL, NO_SAVE, xemb, serr, swed);
-    if (retc != OK)
-      return(retc);
+    if (retc != OK) return(retc);
     pedp->teval = tsv;
     // xp[] = xemb[] - xp[]
     int n = need_speed ? 6 : 3;    
