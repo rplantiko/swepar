@@ -1854,6 +1854,7 @@ static int app_pos_etc_plan_osc(int ipl, int ipli, int iflag, char *serr, struct
      */
     if (is_set(iflag, SEFLG_SPEED))
       vec_sub(xx+3,xxsp,3);
+    
     }
   
   if (is_not_set(iflag, SEFLG_SPEED))
@@ -4710,40 +4711,40 @@ char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed) {
    * 2. asteroid name      
    * The asteroid number may or may not be in brackets      
    */      
-  int ipli = (int) (ipl - SE_AST_OFFSET), iplf = 0;        
-  FILE *fp;        
-  char si[AS_MAXCH], *sp, *sp2;        
-  if ((fp = swid_fopen(-1, SE_ASTNAMFILE, swed->ephepath, NULL, swed)) != NULL) {        
-    while(ipli != iplf && (sp = fgets(si, AS_MAXCH, fp)) != NULL) {        
-      while (*sp == ' ' || *sp == '\t'        
-             || *sp == '(' || *sp == '[' || *sp == '{')        
-        sp++;        
-      if (*sp == '#' || *sp == '\r' || *sp == '\n' || *sp == '\0')        
-        continue;        
-      /* catalog number of body of current line */        
-      iplf = atoi(sp);        
-      if (ipli != iplf)        
-        continue;        
-      /* set pointer after catalog number */        
-      sp = strpbrk(sp, " \t");        
-      if (sp == NULL)        
-        continue; /* there is no name */        
-      while (*sp == ' ' || *sp == '\t')        
-        sp++;        
-      sp2 = strpbrk(sp, "#\r\n");        
-      if (sp2 != NULL)        
-        *sp2 = '\0';        
-      if (*sp == '\0')        
-        continue;        
-      swi_right_trim(sp);        
-      strcpy(s, sp);        
+   
+  *s = '\0';
+  FILE* fp;
+  if ((fp = swid_fopen(-1, SE_ASTNAMFILE, swed->ephepath, 0, swed)) != 0) {
+    int ipli = (int) (ipl - SE_AST_OFFSET);            
+    char *line, buf[MAX_GET_LINE_LENGTH];
+    while ((line = get_line( fp, buf )) != 0) {
+      int ipl_ast;
+      char name_ast[MAX_ASNAM_LENGTH], *pattern;
+      if ( (pattern = get_seastnam_pattern( line[0] ) ) != 0 &&     
+           sscanf(line,pattern,&ipl_ast,name_ast)==2 &&
+           ipl_ast == ipli ) {
+        return strcpy(s,name_ast);
+        }
       }        
     fclose(fp);        
     }
   return s;  
   }  
   
-  
+char *get_seastnam_pattern( char first) {
+  switch(first) {
+    case '\0': 
+    case '#':
+      return 0;
+    case '(':
+      return "( %d ) %[^\0]";
+    case '[':  
+      return "[ %d ] %[^\0]";
+    default:
+      return "%d %[^\0]";  
+    }
+  }
+    
 /* set geographic position and altitude of observer */
 void FAR PASCAL_CONV swed_set_topo(double geolon, double geolat, double geoalt, struct swe_data *swed)
 {

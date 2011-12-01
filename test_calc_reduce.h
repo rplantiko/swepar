@@ -298,6 +298,13 @@ void FAR PASCAL_CONV swed_set_sid_mode(int sid_mode, double t0, double ayan_t0, 
 static int app_pos_rest(struct plan_data *pdp, int iflag, 
     double *xx, double *x2000, struct epsilon *oe, char *serr, struct swe_data *swed);
 
+const int MAX_GET_LINE_LENGTH = 255,
+          MAX_ASNAM_LENGTH = 80;
+
+char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed);
+char *get_seastnam_pattern(char first);
+
+
 // Parts of planet name determination    
 char *read_asteroid_name_from_file(int ipl, char* s, struct swe_data *swed);
 char *read_asteroid_name(int ipl, char* s, struct swe_data *swed);
@@ -440,7 +447,25 @@ static inline int get_ipli( int ipl ) {
   else
     return ipl;
   }
+  
+static inline char* trim_trailing_space(char *s) {
+  char *sp = s + strlen( s ) - 1;
+  while( sp>s && isspace(*sp) ) sp--;
+  *(sp+1) = '\0';
+  return s;
+  }  
 
+static inline char* trim_space(char* s) {
+  char* sp = trim_trailing_space(s);
+  while (*sp != '\0' && isspace(*sp)) sp++;
+  return sp;
+  }    
+  
+static inline char* get_line( FILE* af, char* buf) {
+  return fgets( buf, MAX_GET_LINE_LENGTH, af) ? 
+    trim_space(buf) : 0;
+  }
+  
 static inline bool is_main_asteroid( int ipli ) {
   return ipli < SE_AST_OFFSET;
   }
