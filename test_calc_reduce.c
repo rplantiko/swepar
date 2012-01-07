@@ -3,6 +3,57 @@
 #include "test_calc_reduce.h"
 #include "test_test_calc_reduce.c"
 
+// Exploring the library with some tiny "spike" tests
+ int test_direct() {
+ 
+// reduces positions for following command:
+// swetest -j2452545.0 -p5 -fxss -i16688 
+//         SEFLG_BARYCTR       16384   
+//       + SEFLG_TRUEPOS          16
+//       + SEFLG_J2000            32
+//       + SEFLG_ICRS         131072
+//       + SEFLG_SPEED           256
+ 
+   double tjd = 2452545.0;
+   int ipl = 5;
+   char qfname[255],fname[255],serr[255];
+   double xp[6];
+   
+// File name   
+   swi_gen_filename(tjd, ipl, fname);
+   strcpy(qfname, "\\sweph\\ephe\\");
+   strcat(qfname, fname);
+   
+ // Open the file  
+   FILE* fp = fopen(qfname, BFILE_R_ACCESS);
+ 
+ // Put the minimum data necessary into swed
+   swed.fidat[0].fptr = fp;  
+   strcpy(swed.fidat[0].fnam, fname);
+   
+// Read the necessary stuff   
+   read_const(0, serr, &swed);
+ 
+   struct plan_data *pdp = & swed.pldat[ipl];
+   get_new_segment(tjd, ipl, 0, serr, &swed);    
+   if (pdp->iflg & SEI_FLG_ROTATE)
+     rot_back(ipl,&swed); /**/
+   else
+     pdp->neval = pdp->ncoe;
+ 
+   /* evaluate chebyshew polynomial for tjd */
+   double t = (tjd - pdp->tseg0) / pdp->dseg;
+   t = 2 * t - 1;   
+   for (int i = 0; i <= 2; i++) {
+    xp[i]  = swi_echeb (t, pdp->segp+(i*pdp->ncoe), pdp->neval);
+    xp[i+3] = swi_edcheb(t, pdp->segp+(i*pdp->ncoe), pdp->neval) / pdp->dseg * 2;
+    }
+  
+   for (int i=0;i<6;i++) printf("xp[%d] = %15.10f\n",i,xp[i]);
+   return OK;   
+   } 
+  
+
 int main( int argc, char ** argv ) {
 
   double tjd, xx[6];
@@ -25,6 +76,10 @@ int main( int argc, char ** argv ) {
     }
 
   if (argc <= 2) {
+    if (argc==2 && strcmp(argv[1],"direct")==0) {
+      test_direct();
+      return 0;
+      }
 // do some tests
     bool ok = test(testfile);
     exit ( ok ? EXIT_SUCCESS : EXIT_FAILURE );
@@ -32,7 +87,7 @@ int main( int argc, char ** argv ) {
 
   }
 
-
+  
 // --- API functions, compatibility layer
 // For usage see http://astro.com/swisseph/swephprg.htm
 // Dead options in this version:
