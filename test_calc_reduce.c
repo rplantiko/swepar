@@ -7,7 +7,7 @@
  int test_direct() {
  
 // reduces positions for following command:
-// swetest -j2452545.0 -p5 -fxss -i16688 
+// swetest -j2452545.0 -p5 -fxss -i147760 
 //         SEFLG_BARYCTR       16384   
 //       + SEFLG_TRUEPOS          16
 //       + SEFLG_J2000            32
