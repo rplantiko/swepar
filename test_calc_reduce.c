@@ -18,7 +18,9 @@
    int ipl = 5;
    char qfname[255],fname[255],serr[255];
    double xp[6];
-   
+ 
+   struct swe_data swed_local;
+ 
 // File name   
    swi_gen_filename(tjd, ipl, fname);
    strcpy(qfname, "\\sweph\\ephe\\");
@@ -28,16 +30,16 @@
    FILE* fp = fopen(qfname, BFILE_R_ACCESS);
  
  // Put the minimum data necessary into swed
-   swed.fidat[0].fptr = fp;  
-   strcpy(swed.fidat[0].fnam, fname);
+   swed_local.fidat[0].fptr = fp;  
+   strcpy(swed_local.fidat[0].fnam, fname);
    
 // Read the necessary stuff   
-   read_const(0, serr, &swed);
+   read_const(0, serr, &swed_local);
  
-   struct plan_data *pdp = & swed.pldat[ipl];
-   get_new_segment(tjd, ipl, 0, serr, &swed);    
+   struct plan_data *pdp = & swed_local.pldat[ipl];
+   get_new_segment(tjd, ipl, 0, serr, &swed_local);    
    if (pdp->iflg & SEI_FLG_ROTATE)
-     rot_back(ipl,&swed); /**/
+     rot_back(ipl,&swed_local); /**/
    else
      pdp->neval = pdp->ncoe;
  
