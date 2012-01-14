@@ -1,0 +1,5 @@
+TESTCASE
+description:New mode: Barycentric, directly from file
+planets:5
+flags:416048  # NEW_MODE + ICRS + BARYCTR + XYZ + TRUEPOS + J2000
+jd:2452545.0 

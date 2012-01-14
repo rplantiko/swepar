@@ -3,24 +3,30 @@
 #include "test_calc_reduce.h"
 #include "test_test_calc_reduce.c"
 
+// Proviso flag for new calculation mode
+const int SEFLG_NEW_MODE = 256*1024;
+
+static void calcMainPlanetFromFile(double tjd, int ipl, double *x, char* serr, struct swe_data *iswed) {
 // Exploring the library with some tiny "spike" tests
- int test_direct() {
  
 // reduces positions for following command:
-// swetest -j2452545.0 -p5 -fxss -i147760 
+// swetest -j2452545 -p5 -i416048 -fxss
 //         SEFLG_BARYCTR       16384   
+//       + SEFLG_XYZ            4096
+//       + SEFLG_EQUATORIAL     2048
 //       + SEFLG_TRUEPOS          16
 //       + SEFLG_J2000            32
 //       + SEFLG_ICRS         131072
 //       + SEFLG_SPEED           256
+//       + SEFLG_XYZ            4096
+//       + SEFLG_NEW_MODE     262144
  
-   double tjd = 2452545.0;
-   int ipl = 5;
-   char qfname[255],fname[255],serr[255];
-   double xp[6];
- 
-   struct swe_data swed_local;
- 
+   char qfname[255],fname[255];
+   
+   struct swe_data sd = {};
+   struct swe_data *swed_local;
+   swed_local = &sd;
+  
 // File name   
    swi_gen_filename(tjd, ipl, fname);
    strcpy(qfname, "\\sweph\\ephe\\");
@@ -30,16 +36,16 @@
    FILE* fp = fopen(qfname, BFILE_R_ACCESS);
  
  // Put the minimum data necessary into swed
-   swed_local.fidat[0].fptr = fp;  
-   strcpy(swed_local.fidat[0].fnam, fname);
+   swed_local->fidat[0].fptr = fp;  
+   strcpy(swed_local->fidat[0].fnam, fname);
    
 // Read the necessary stuff   
-   read_const(0, serr, &swed_local);
+   read_const(0, serr, swed_local);
  
-   struct plan_data *pdp = & swed_local.pldat[ipl];
-   get_new_segment(tjd, ipl, 0, serr, &swed_local);    
+   struct plan_data *pdp = & swed_local->pldat[ipl];
+   get_new_segment(tjd, ipl, 0, serr, swed_local);    
    if (pdp->iflg & SEI_FLG_ROTATE)
-     rot_back(ipl,&swed_local); /**/
+     rot_back(ipl,swed_local); /**/
    else
      pdp->neval = pdp->ncoe;
  
@@ -47,14 +53,19 @@
    double t = (tjd - pdp->tseg0) / pdp->dseg;
    t = 2 * t - 1;   
    for (int i = 0; i <= 2; i++) {
-    xp[i]  = swi_echeb (t, pdp->segp+(i*pdp->ncoe), pdp->neval);
-    xp[i+3] = swi_edcheb(t, pdp->segp+(i*pdp->ncoe), pdp->neval) / pdp->dseg * 2;
+//    chebysheff(
+    x[i]  = swi_echeb (t, pdp->segp+(i*pdp->ncoe), pdp->neval);
+    x[i+3] = swi_edcheb(t, pdp->segp+(i*pdp->ncoe), pdp->neval) / pdp->dseg * 2;
     }
-  
-   for (int i=0;i<6;i++) printf("xp[%d] = %15.10f\n",i,xp[i]);
+
+  }
+
+int swecalc_new_mode(double tjd, int ipl, int iflag, double **x, char *serr, struct swe_data *iswed) {
+   double xx[6];
+   calcMainPlanetFromFile(tjd,ipl,xx,serr,iswed);
+   vec_copy(*x+18,xx,6); // positions from file are cartesian + equatorial -> slot 18..23 
    return OK;   
    } 
-  
 
 int main( int argc, char ** argv ) {
 
@@ -78,10 +89,6 @@ int main( int argc, char ** argv ) {
     }
 
   if (argc <= 2) {
-    if (argc==2 && strcmp(argv[1],"direct")==0) {
-      test_direct();
-      return 0;
-      }
 // do some tests
     bool ok = test(testfile);
     exit ( ok ? EXIT_SUCCESS : EXIT_FAILURE );
@@ -523,6 +530,9 @@ int swecalc_asteroid(double tjd, int ipl, int iflag, double **x, char *serr, str
 
   }
 
+
+  
+  
 int swecalc_fictitious(double tjd, int ipl, int iflag, double **x, char *serr, struct swe_data *swed) {
    int retc;
     /* internal planet number */
@@ -558,6 +568,9 @@ int swecalc_fictitious(double tjd, int ipl, int iflag, double **x, char *serr, s
 
 // Which calculation method has to be chosen
 calcfun swecalc_get_calc_type(int ipl, int iflag, char* serr, struct swe_data *swed) {
+
+// New mode
+  if (is_set(iflag,SEFLG_NEW_MODE)) return swecalc_new_mode;
 
 // Main planet
   if ( ( ipl == SE_SUN   && is_not_set(iflag,SEFLG_HELCTR) )
