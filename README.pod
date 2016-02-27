@@ -1,5 +1,7 @@
 =head1 A parallel version of the Swiss Ephemeris
 
+NOTE: Since release 2.03, the Swiss Ephemeris is multithreading enabled. The way to achieve this was to simply declare all global and stativ variables as thread-local (storage class TLS).
+
 This repository is used during development of a thread safe version of Alois Treindl's and Dieter Koch's Swiss Ephemeris (L<http://www.astro.com/swisseph/>). This would be helpful when integrating the ephemeris into a web application using a multithreading-enabled web container (working with, e.g. Java servlets or on an Apache Web Server with C<mod_perl>). Since ephemeris computations are CPU intensive, they take advantage of parallelization, achieving a performance that scales with the number of processor cores in use. This is another reason that makes a parallelized version of Swiss Ephemeris attractive.
 
 Note: Since 2014, I continued this development on a Linux system. See L<http://swepar.blogspot.ch/> for the progress of this work.
